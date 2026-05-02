@@ -4,12 +4,15 @@
 // browser. No data leaves the page — all output to console + a small card.
 //
 // What's tested:
+//   0. Page-script context (window.IntacctContext from merge fields)
 //   1. window globals matching /sage|intacct|ia|session|company|user/i
 //   2. Cookie names (NOT values)
 //   3. DOM/meta scan for csrf or session hints
-//   4a. XML endpoint sanity check (expected to 401 without sender creds)
-//   4b. REST endpoint probe (/ia/api/v1/) with credentials: include
-//   4c. Network sniffer — wraps fetch + XHR for 30s, logs URLs the page calls
+//   4a. XML endpoint sanity — no auth, expected to fail (sender required)
+//   4b. XML endpoint with <sessionid> only — does Intacct accept session-only?
+//   4c. REST endpoint probe — bare credentialled GET, no headers
+//   4d. REST with session ID in Bearer / X-Intacct-Session / X-Session-Id
+//   4e. Network sniffer — wraps fetch + XHR for 30s, logs URLs the page calls
 //   5. Iframe context (window.parent / window.top relationship)
 //   6. URL / location host
 //
@@ -21,27 +24,50 @@
   const SNIFF_DURATION_MS = 30_000;
   const SAFE_KEY_REGEX = /sage|intacct|^ia[_A-Z]|session|company|userid|user_id|csrf|token/i;
 
+  // window.IntacctContext is populated by the page script using merge fields
+  // before this external script loads. Expected shape:
+  //   { sessionId, apiEndpoint, intacctHost, intacctEndpoint,
+  //     user: { login, name, email, recordNo } }
+  const CTX = (typeof window.IntacctContext === 'object' && window.IntacctContext) || {};
+
   const findings = {
-    globals:    { status: 'pending', summary: '' },
-    cookies:    { status: 'pending', summary: '' },
-    dom:        { status: 'pending', summary: '' },
-    xmlProbe:   { status: 'pending', summary: '' },
-    restProbe:  { status: 'pending', summary: '' },
-    sniffer:    { status: 'pending', summary: '' },
-    iframe:     { status: 'pending', summary: '' },
-    location:   { status: 'pending', summary: '' },
+    context:     { status: 'pending', summary: '' },
+    globals:     { status: 'pending', summary: '' },
+    cookies:     { status: 'pending', summary: '' },
+    dom:         { status: 'pending', summary: '' },
+    xmlProbe:    { status: 'pending', summary: '' },
+    xmlSession:  { status: 'pending', summary: '' },
+    restProbe:   { status: 'pending', summary: '' },
+    sessionAuth: { status: 'pending', summary: '' },
+    sniffer:     { status: 'pending', summary: '' },
+    iframe:      { status: 'pending', summary: '' },
+    location:    { status: 'pending', summary: '' },
   };
 
   const TESTS = [
-    ['globals',   'Window globals'],
-    ['cookies',   'Cookie names'],
-    ['dom',       'DOM session hints'],
-    ['xmlProbe',  'XML endpoint (sanity)'],
-    ['restProbe', 'REST endpoint'],
-    ['sniffer',   'Network sniffer (30s)'],
-    ['iframe',    'Iframe context'],
-    ['location',  'URL / host'],
+    ['context',     'Page-script context'],
+    ['globals',     'Window globals'],
+    ['cookies',     'Cookie names'],
+    ['dom',         'DOM session hints'],
+    ['xmlProbe',    'XML — no auth (sanity)'],
+    ['xmlSession',  'XML — sessionid only'],
+    ['restProbe',   'REST — no auth'],
+    ['sessionAuth', 'REST — session header'],
+    ['sniffer',     'Network sniffer (30s)'],
+    ['iframe',      'Iframe context'],
+    ['location',    'URL / host'],
   ];
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  function escapeXml(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
 
   // ── Card ──────────────────────────────────────────────────────────────────
 
@@ -153,6 +179,40 @@
 
   // ── Tests ─────────────────────────────────────────────────────────────────
 
+  function testContext() {
+    setStatus('context', 'running', '');
+    const present = {
+      sessionId:       !!CTX.sessionId,
+      apiEndpoint:     !!CTX.apiEndpoint,
+      intacctHost:     !!CTX.intacctHost,
+      intacctEndpoint: !!CTX.intacctEndpoint,
+      user:            !!(CTX.user && CTX.user.login),
+    };
+    // Print a redacted view — we never log actual session ID values.
+    console.groupCollapsed('[IntacctProbe] Test 0 — page-script context');
+    console.log(' sessionId present:', present.sessionId,
+                present.sessionId ? '(length ' + String(CTX.sessionId).length + ')' : '');
+    console.log(' apiEndpoint:', CTX.apiEndpoint || '(missing)');
+    console.log(' intacctHost:', CTX.intacctHost || '(missing)');
+    console.log(' intacctEndpoint:', CTX.intacctEndpoint || '(missing)');
+    if (CTX.user) {
+      console.log(' user:', { login: CTX.user.login, name: CTX.user.name, hasEmail: !!CTX.user.email, recordNo: CTX.user.recordNo });
+    } else {
+      console.log(' user: (missing)');
+    }
+    console.groupEnd();
+
+    const haveSession = present.sessionId;
+    const haveEndpoint = present.apiEndpoint || present.intacctEndpoint;
+    if (haveSession && haveEndpoint) {
+      setStatus('context', 'pass', 'session + endpoint');
+    } else if (haveSession || haveEndpoint) {
+      setStatus('context', 'info', 'partial');
+    } else {
+      setStatus('context', 'inconclusive', 'no merge fields injected');
+    }
+  }
+
   function testGlobals() {
     setStatus('globals', 'running', '');
     const matches = [];
@@ -261,6 +321,63 @@
     }
   }
 
+  async function testXmlSession() {
+    setStatus('xmlSession', 'running', '');
+    if (!CTX.sessionId) {
+      console.groupCollapsed('[IntacctProbe] Test 4b — XML w/ sessionid only');
+      console.log(' skipped: no sessionId in context');
+      console.groupEnd();
+      setStatus('xmlSession', 'inconclusive', 'no session id');
+      return;
+    }
+    // Try the XML envelope with <sessionid> in <authentication> but NO sender
+    // block in <control>. Per Sage docs the sender block is mandatory; we
+    // confirm that's still the case from in-page (i.e., Intacct's customization
+    // framework does NOT silently inject sender on our behalf).
+    const envelope =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<request><control>' +
+        '<controlid>probe_session_only</controlid>' +
+        '<dtdversion>3.0</dtdversion>' +
+      '</control>' +
+      '<operation>' +
+        '<authentication><sessionid>' + escapeXml(CTX.sessionId) + '</sessionid></authentication>' +
+        '<content><function controlid="fn"><getAPISession/></function></content>' +
+      '</operation></request>';
+
+    const target = CTX.apiEndpoint || '/ia/xml/xmlgw.phtml';
+    try {
+      const r = await fetch(target, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'text/xml' },
+        body: envelope,
+      });
+      const text = await r.text();
+      const head = text.slice(0, 300);
+      const looksAuthenticated = /status>success/.test(text);
+      console.groupCollapsed('[IntacctProbe] Test 4b — XML w/ sessionid only');
+      console.log(' target:', target);
+      console.log(' status:', r.status, r.statusText);
+      console.log(' looks authenticated:', looksAuthenticated);
+      console.log(' first 300 chars:', head);
+      console.groupEnd();
+
+      if (looksAuthenticated && r.ok) {
+        setStatus('xmlSession', 'pass', 'works without sender!');
+      } else if (r.ok) {
+        setStatus('xmlSession', 'fail', 'rejected (sender required)');
+      } else {
+        setStatus('xmlSession', 'fail', 'http ' + r.status);
+      }
+    } catch (e) {
+      console.groupCollapsed('[IntacctProbe] Test 4b — XML w/ sessionid only');
+      console.log(' fetch threw:', e.message);
+      console.groupEnd();
+      setStatus('xmlSession', 'fail', 'network error');
+    }
+  }
+
   async function testRestProbe() {
     setStatus('restProbe', 'running', '');
     // Try a few REST shapes — list to see what we hit. We're not committing
@@ -280,7 +397,7 @@
         results.push({ path, error: e.message });
       }
     }
-    console.groupCollapsed('[IntacctProbe] Test 4b — REST endpoint probe');
+    console.groupCollapsed('[IntacctProbe] Test 4c — REST endpoint probe');
     results.forEach(r => console.log(' ', r));
     console.groupEnd();
 
@@ -291,6 +408,70 @@
       setStatus('restProbe', 'fail', 'no REST surface');
     } else {
       setStatus('restProbe', 'inconclusive', 'mixed responses');
+    }
+  }
+
+  // Try the session ID against the REST surface in several auth shapes. We
+  // don't know which header (if any) Intacct's REST accepts session IDs in,
+  // so this is a sweep — Bearer, X-Intacct-Session, X-Session-Id, plus a
+  // bare credentialled call (cookie-only).
+  async function testSessionAuth() {
+    setStatus('sessionAuth', 'running', '');
+    if (!CTX.sessionId) {
+      console.groupCollapsed('[IntacctProbe] Test 4d — REST w/ session header');
+      console.log(' skipped: no sessionId in context');
+      console.groupEnd();
+      setStatus('sessionAuth', 'inconclusive', 'no session id');
+      return;
+    }
+
+    // Build candidate (URL × header-shape) pairs.
+    const urls = [];
+    if (CTX.apiEndpoint && /^https?:/.test(CTX.apiEndpoint)) urls.push(CTX.apiEndpoint);
+    urls.push('/ia/api/v1/');
+    urls.push('/ia/api/v1/objects');
+    urls.push('/ia/api/v1/companies');
+
+    const headerShapes = [
+      { name: 'Bearer',                 headers: { 'Authorization': 'Bearer ' + CTX.sessionId } },
+      { name: 'X-Intacct-Session',      headers: { 'X-Intacct-Session': CTX.sessionId } },
+      { name: 'X-Session-Id',           headers: { 'X-Session-Id': CTX.sessionId } },
+      { name: 'cookie-only',            headers: {} }, // relies on credentials: include
+    ];
+
+    const results = [];
+    for (const url of urls) {
+      for (const shape of headerShapes) {
+        try {
+          const r = await fetch(url, {
+            method: 'GET',
+            credentials: 'include',
+            headers: { 'Accept': 'application/json', ...shape.headers },
+          });
+          let bodyHead = '';
+          try { bodyHead = (await r.text()).slice(0, 80); } catch (_) {}
+          results.push({ url, shape: shape.name, status: r.status, ct: r.headers.get('content-type'), bodyHead });
+        } catch (e) {
+          results.push({ url, shape: shape.name, error: e.message });
+        }
+      }
+    }
+
+    console.groupCollapsed('[IntacctProbe] Test 4d — REST w/ session header (' + results.length + ' attempts)');
+    results.forEach(r => console.log(' ', r));
+    console.groupEnd();
+
+    const winner = results.find(r => r.status >= 200 && r.status < 300);
+    const partial = results.find(r => r.status === 401 || r.status === 403); // endpoint exists but auth shape wrong
+
+    if (winner) {
+      setStatus('sessionAuth', 'pass', winner.shape + ' @ ' + (winner.url.split('?')[0]));
+    } else if (partial) {
+      setStatus('sessionAuth', 'fail', 'endpoint live, auth rejected');
+    } else if (results.every(r => r.status === 404 || r.error)) {
+      setStatus('sessionAuth', 'fail', 'no REST surface reachable');
+    } else {
+      setStatus('sessionAuth', 'inconclusive', 'mixed responses — see console');
     }
   }
 
@@ -354,7 +535,7 @@
         if (isSame) sameOriginPaths[c.url] = (sameOriginPaths[c.url] || 0) + 1;
       });
 
-      console.groupCollapsed('[IntacctProbe] Test 4c — network sniffer (' + captured.length + ' requests)');
+      console.groupCollapsed('[IntacctProbe] Test 4e — network sniffer (' + captured.length + ' requests)');
       console.log(' all requests:');
       captured.forEach(c => console.log(' ', c.method, c.kind, c.status, c.url));
       console.log(' same-origin path counts:');
@@ -415,6 +596,7 @@
       if (elapsedEl) elapsedEl.textContent = Math.floor((Date.now() - startedAt) / 1000) + 's';
     }, 1000);
 
+    testContext();
     testGlobals();
     testCookies();
     testDom();
@@ -422,7 +604,9 @@
     testLocation();
     testSniffer(); // runs in background for 30s
     await testXmlProbe();
+    await testXmlSession();
     await testRestProbe();
+    await testSessionAuth();
 
     setTimeout(() => {
       clearInterval(elapsedTimer);
