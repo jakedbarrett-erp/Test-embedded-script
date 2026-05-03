@@ -7,18 +7,35 @@
 //   2. This file injects a launcher button into Intacct's page.
 //   3. Click → fullscreen overlay opens (95vw × 95vh modal).
 //   4. Overlay opens with a loading state, preloads all reference lists via
-//      IntacctSageClient (Promise.all over 8 lists), then renders the app.
-//   5. Esc or X closes the overlay; state persists for re-open within session.
+//      IntacctSageClient, then mounts the React UI.
+//   5. Esc or X closes the overlay; localStorage caches list data so re-opens
+//      are instant.
 //
-// CURRENT STATUS: scaffold + data-flow smoke test. The launcher, overlay,
-// preload, and a "verify" panel that displays counts of each loaded list are
-// in place. The full React UI (port of allocation-tool.html) is the next
-// build step.
+// CURRENT STATUS: Phase 1 — Frame + Step 1 (Period selection).
+//   • Header with theme toggle (light/dark, persisted)
+//   • 4-step navigation indicator
+//   • Sidebar layout (336px) with step cards
+//   • Step 1: Period selector wired to live Sage data via getPeriods()
+//   • Right panel: placeholder for journal entry display
+//   Steps 2–4 (Source, Basis, Target/Post) and saved-allocations panel are
+//   the next build phases.
 //
-// Dependencies (auto-loaded if missing):
-//   React 18.2 from CDN
-//   ReactDOM 18.2 from CDN
-//   IntacctSageClient (loaded by page script before this file)
+// Dependencies (all expected to live on the same GitHub Pages origin as this
+// file — derived automatically from this script's own src):
+//   react.production.min.js          — React 18.2 UMD build
+//   react-dom.production.min.js      — ReactDOM 18.2 UMD build
+//   htm.umd.js                       — htm@3.1.1 (~1KB tagged-template helper)
+//   intacct-sage-client.js           — preloaded by the page script
+//
+// Self-hosting these on GitHub Pages avoids needing to add unpkg.com or
+// jsdelivr.net to Intacct's allowed-content list, and keeps the entire
+// dependency chain on one origin you control.
+//
+// One-time setup: download these three files into the same folder as the
+// rest of your scripts and push to GitHub Pages:
+//   curl -o react.production.min.js     https://unpkg.com/react@18.2.0/umd/react.production.min.js
+//   curl -o react-dom.production.min.js https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js
+//   curl -o htm.umd.js                  https://unpkg.com/htm@3.1.1/dist/htm.umd.js
 
 (function () {
   'use strict';
@@ -28,19 +45,31 @@
   const LAUNCHER_ID = 'iat-launcher';
   const OVERLAY_ID  = 'iat-overlay';
   const ROOT_ID     = 'iat-root';
-  const REACT_URL     = 'https://unpkg.com/react@18.2.0/umd/react.production.min.js';
-  const REACT_DOM_URL = 'https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js';
+  const THEME_KEY   = 'iat-theme';
 
-  // ── Defensive: check Sage client is present ──────────────────────────────
+  // Derive the base URL from this script's own src so dependencies load from
+  // the same origin (GitHub Pages) without hard-coding the user/repo path.
+  const SELF_SRC = (() => {
+    if (document.currentScript && document.currentScript.src) return document.currentScript.src;
+    const all = document.querySelectorAll('script[src*="intacct-allocation-tool"]');
+    return (all[all.length - 1] && all[all.length - 1].src) || '';
+  })();
+  const BASE_URL      = SELF_SRC.replace(/[^/]+$/, '');
+  const REACT_URL     = BASE_URL + 'react.production.min.js';
+  const REACT_DOM_URL = BASE_URL + 'react-dom.production.min.js';
+  const HTM_URL       = BASE_URL + 'htm.umd.js';
+
+  // ── Defensive: Sage client must be present ───────────────────────────────
   if (!window.IntacctSageClient) {
     console.error('[IntacctAllocationTool] IntacctSageClient missing — load intacct-sage-client.js first');
     return;
   }
 
-  // ── Styles (scoped to our IDs so we cannot affect Intacct's UI) ──────────
+  // ── Styles (scoped under #iat-* and .iat-* — cannot leak into Intacct) ──
   function injectStyles() {
     if (document.getElementById(STYLE_ID)) return;
     const css = `
+      /* ── Launcher button ──────────────────────────────────────────────── */
       #${LAUNCHER_ID} {
         position: fixed; right: 20px; bottom: 20px; z-index: 999998;
         display: inline-flex; align-items: center; gap: 8px;
@@ -58,6 +87,7 @@
         background: rgba(255,255,255,.15); border-radius: 4px; font-size: 11px; font-weight: 700;
       }
 
+      /* ── Overlay shell ────────────────────────────────────────────────── */
       #${OVERLAY_ID} {
         position: fixed; inset: 0; z-index: 999999;
         background: rgba(15, 15, 20, 0.55);
@@ -67,7 +97,7 @@
       }
       #${OVERLAY_ID} .iat-modal {
         width: 95vw; height: 95vh;
-        background: #ffffff;
+        background: var(--iat-bg, #fff);
         border-radius: 12px;
         box-shadow: 0 20px 60px rgba(0,0,0,.35);
         display: flex; flex-direction: column;
@@ -78,74 +108,226 @@
         from { opacity: 0; transform: scale(0.98); }
         to   { opacity: 1; transform: scale(1); }
       }
-      #${OVERLAY_ID} .iat-modal-header {
-        display: flex; align-items: center; gap: 12px;
-        padding: 14px 20px;
-        border-bottom: 1px solid #e4e4e7;
-        background: #fafafa;
+
+      /* ── Theme variables ──────────────────────────────────────────────── */
+      .iat-app {
+        --iat-bg:        #ffffff;
+        --iat-bg-soft:   #fafafa;
+        --iat-bg-card:   #ffffff;
+        --iat-fg:        #18181b;
+        --iat-fg-soft:   #52525b;
+        --iat-fg-muted:  #a1a1aa;
+        --iat-border:    #e4e4e7;
+        --iat-border-soft:#f4f4f5;
+        --iat-accent:    #C87055;
+        --iat-accent-soft:rgba(200,112,85,.10);
+        --iat-success:   #16a34a;
+        --iat-success-soft:#f0fdf4;
+        --iat-warning:   #92400e;
+        --iat-warning-soft:#fef3c7;
+        --iat-danger:    #dc2626;
+        --iat-danger-soft:#fef2f2;
+      }
+      .iat-app[data-theme="dark"] {
+        --iat-bg:        #0a0a0b;
+        --iat-bg-soft:   #18181b;
+        --iat-bg-card:   #161618;
+        --iat-fg:        #fafafa;
+        --iat-fg-soft:   #a1a1aa;
+        --iat-fg-muted:  #71717a;
+        --iat-border:    #27272a;
+        --iat-border-soft:#1f1f22;
+        --iat-accent:    #e8956d;
+        --iat-accent-soft:rgba(232,149,109,.18);
+        --iat-success-soft:rgba(22,163,74,.12);
+        --iat-warning-soft:rgba(146,64,14,.18);
+        --iat-danger-soft:rgba(220,38,38,.12);
+      }
+
+      /* ── App layout ──────────────────────────────────────────────────── */
+      .iat-app {
+        flex: 1;
+        display: flex; flex-direction: column;
+        background: var(--iat-bg);
+        color: var(--iat-fg);
+        overflow: hidden;
+      }
+      .iat-app-header {
+        display: flex; align-items: center; gap: 14px;
+        padding: 12px 20px;
+        border-bottom: 1px solid var(--iat-border);
+        background: var(--iat-bg-soft);
         flex-shrink: 0;
       }
-      #${OVERLAY_ID} .iat-modal-icon {
+      .iat-app-icon {
         width: 28px; height: 28px; border-radius: 6px;
-        background: #C87055; color: #fff;
+        background: var(--iat-accent); color: #fff;
         display: flex; align-items: center; justify-content: center;
-        font-weight: 700; font-size: 13px; flex-shrink: 0;
+        font-weight: 700; font-size: 13px;
       }
-      #${OVERLAY_ID} .iat-modal-title {
-        flex: 1; font-size: 15px; font-weight: 600; letter-spacing: -0.2px; color: #18181b;
+      .iat-app-title {
+        flex: 1; font-size: 15px; font-weight: 600; letter-spacing: -0.2px; color: var(--iat-fg);
       }
-      #${OVERLAY_ID} .iat-modal-subtitle {
-        font-size: 12px; color: #71717a; font-weight: 400; margin-left: 8px;
+      .iat-app-title-sub {
+        font-size: 12px; color: var(--iat-fg-muted); font-weight: 400; margin-left: 8px;
       }
-      #${OVERLAY_ID} .iat-close {
-        width: 32px; height: 32px; border: 1px solid #e4e4e7; background: #fff;
-        color: #71717a; cursor: pointer; border-radius: 6px;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 16px; line-height: 1;
+      .iat-app-actions { display: flex; gap: 8px; }
+      .iat-icon-btn {
+        width: 32px; height: 32px;
+        border: 1px solid var(--iat-border); background: var(--iat-bg-card);
+        color: var(--iat-fg-soft); cursor: pointer; border-radius: 6px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 14px; line-height: 1;
         transition: background .12s, border-color .12s, color .12s;
       }
-      #${OVERLAY_ID} .iat-close:hover { background: #f4f4f5; border-color: #d4d4d8; color: #18181b; }
+      .iat-icon-btn:hover { background: var(--iat-bg-soft); color: var(--iat-fg); border-color: var(--iat-fg-muted); }
+      .iat-close-btn {
+        width: 32px; height: 32px; border: 1px solid var(--iat-border); background: var(--iat-bg-card);
+        color: var(--iat-fg-soft); cursor: pointer; border-radius: 6px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 16px; line-height: 1;
+      }
+      .iat-close-btn:hover { background: var(--iat-bg-soft); color: var(--iat-fg); }
 
-      #${ROOT_ID} { flex: 1; overflow: auto; }
+      /* ── Body grid ────────────────────────────────────────────────────── */
+      .iat-app-body {
+        flex: 1;
+        display: grid; grid-template-columns: 336px 1fr;
+        overflow: hidden;
+      }
+      .iat-sidebar {
+        border-right: 1px solid var(--iat-border);
+        background: var(--iat-bg-soft);
+        overflow-y: auto;
+        padding: 16px;
+        display: flex; flex-direction: column; gap: 12px;
+      }
+      .iat-content {
+        background: var(--iat-bg);
+        overflow-y: auto;
+        padding: 24px 28px;
+      }
 
+      /* ── Step indicator ───────────────────────────────────────────────── */
+      .iat-stepnav {
+        display: flex; align-items: center; gap: 6px;
+        padding: 10px 14px;
+        background: var(--iat-bg-card);
+        border: 1px solid var(--iat-border);
+        border-radius: 8px;
+        margin-bottom: 4px;
+      }
+      .iat-stepnav-dot {
+        width: 22px; height: 22px; border-radius: 50%;
+        background: var(--iat-bg-soft); border: 1px solid var(--iat-border);
+        color: var(--iat-fg-muted);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700;
+        transition: all .15s;
+      }
+      .iat-stepnav-dot.active { background: var(--iat-accent); border-color: var(--iat-accent); color: #fff; }
+      .iat-stepnav-dot.done   { background: var(--iat-accent-soft); border-color: var(--iat-accent); color: var(--iat-accent); }
+      .iat-stepnav-line {
+        flex: 1; height: 2px; background: var(--iat-border);
+        border-radius: 1px;
+      }
+      .iat-stepnav-line.done { background: var(--iat-accent); }
+
+      /* ── Step card ────────────────────────────────────────────────────── */
+      .iat-step {
+        background: var(--iat-bg-card);
+        border: 1px solid var(--iat-border);
+        border-radius: 8px;
+        padding: 12px 14px;
+        display: flex; flex-direction: column; gap: 10px;
+      }
+      .iat-step.active { border-color: var(--iat-accent); box-shadow: 0 0 0 3px var(--iat-accent-soft); }
+      .iat-step-head { display: flex; align-items: center; gap: 10px; }
+      .iat-step-num {
+        width: 22px; height: 22px; border-radius: 50%;
+        background: var(--iat-bg-soft); border: 1px solid var(--iat-border);
+        color: var(--iat-fg-soft);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700;
+        flex-shrink: 0;
+      }
+      .iat-step.active .iat-step-num { background: var(--iat-accent); border-color: var(--iat-accent); color: #fff; }
+      .iat-step.done   .iat-step-num { background: var(--iat-accent-soft); border-color: var(--iat-accent); color: var(--iat-accent); }
+      .iat-step-title {
+        font-size: 13px; font-weight: 600; color: var(--iat-fg); flex: 1;
+        letter-spacing: -0.1px;
+      }
+      .iat-step-status {
+        font-size: 11px; color: var(--iat-fg-muted);
+      }
+      .iat-step-body { display: flex; flex-direction: column; gap: 8px; }
+
+      /* ── Form controls ────────────────────────────────────────────────── */
+      .iat-label {
+        font-size: 11px; font-weight: 600; color: var(--iat-fg-soft);
+        text-transform: uppercase; letter-spacing: .04em;
+      }
+      .iat-select {
+        width: 100%;
+        padding: 8px 10px;
+        background: var(--iat-bg);
+        border: 1px solid var(--iat-border);
+        border-radius: 6px;
+        color: var(--iat-fg);
+        font-size: 13px; font-family: inherit;
+        cursor: pointer;
+        transition: border-color .12s, box-shadow .12s;
+      }
+      .iat-select:hover  { border-color: var(--iat-fg-muted); }
+      .iat-select:focus  { outline: none; border-color: var(--iat-accent); box-shadow: 0 0 0 3px var(--iat-accent-soft); }
+      .iat-readout {
+        margin-top: 4px;
+        padding: 8px 10px;
+        background: var(--iat-bg-soft);
+        border: 1px solid var(--iat-border-soft);
+        border-radius: 6px;
+        font-size: 12px;
+        color: var(--iat-fg-soft);
+      }
+      .iat-readout-strong { color: var(--iat-fg); font-weight: 500; }
+
+      /* ── Right-panel placeholder ──────────────────────────────────────── */
+      .iat-content-empty {
+        height: 100%;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; gap: 10px; padding: 40px;
+        color: var(--iat-fg-muted);
+      }
+      .iat-content-empty-icon {
+        width: 48px; height: 48px; border-radius: 50%;
+        background: var(--iat-bg-soft); border: 1px solid var(--iat-border);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; color: var(--iat-fg-muted);
+      }
+      .iat-content-empty-title { font-size: 14px; color: var(--iat-fg-soft); font-weight: 500; }
+      .iat-content-empty-detail { font-size: 12px; max-width: 360px; line-height: 1.5; }
+
+      /* ── Loading & error states ───────────────────────────────────────── */
       .iat-loading {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        height: 100%; gap: 14px; color: #52525b;
+        height: 100%; gap: 14px; color: var(--iat-fg-soft, #52525b);
       }
       .iat-spinner {
         width: 36px; height: 36px; border-radius: 50%;
-        border: 3px solid #e4e4e7; border-top-color: #C87055;
+        border: 3px solid var(--iat-border, #e4e4e7); border-top-color: var(--iat-accent, #C87055);
         animation: iat-spin 0.8s linear infinite;
       }
       @keyframes iat-spin { to { transform: rotate(360deg); } }
       .iat-loading-msg { font-size: 13px; }
-      .iat-loading-detail { font-size: 11px; color: #a1a1aa; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .iat-loading-detail { font-size: 11px; color: var(--iat-fg-muted, #a1a1aa); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
       .iat-error {
         margin: 32px; padding: 20px;
-        background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
-        color: #991b1b;
+        background: var(--iat-danger-soft, #fef2f2); border: 1px solid #fecaca; border-radius: 8px;
+        color: var(--iat-danger, #991b1b);
       }
       .iat-error-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
       .iat-error-detail { font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-word; }
-
-      .iat-verify {
-        max-width: 720px; margin: 32px auto; padding: 0 24px;
-      }
-      .iat-verify h2 { font-size: 16px; font-weight: 600; color: #18181b; margin: 0 0 6px; letter-spacing: -0.2px; }
-      .iat-verify-lead { font-size: 13px; color: #52525b; margin: 0 0 20px; }
-      .iat-verify-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;
-      }
-      .iat-verify-card {
-        padding: 12px 14px;
-        border: 1px solid #e4e4e7; border-radius: 8px; background: #fff;
-      }
-      .iat-verify-card-label { font-size: 11px; color: #71717a; text-transform: uppercase; letter-spacing: .03em; }
-      .iat-verify-card-value { font-size: 22px; font-weight: 600; color: #18181b; margin-top: 2px; letter-spacing: -0.5px; }
-      .iat-verify-card-detail { font-size: 11px; color: #a1a1aa; margin-top: 4px; }
-      .iat-verify-foot { margin-top: 24px; padding: 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; color: #166534; font-size: 12px; line-height: 1.55; }
-      .iat-verify-foot strong { color: #15803d; }
     `;
     const s = document.createElement('style');
     s.id = STYLE_ID;
@@ -153,7 +335,7 @@
     document.head.appendChild(s);
   }
 
-  // ── Dependency loader (React + ReactDOM if missing) ──────────────────────
+  // ── Dependency loader ─────────────────────────────────────────────────────
   function loadOnce(url) {
     return new Promise((resolve, reject) => {
       const existing = document.querySelector('script[data-iat-src="' + url + '"]');
@@ -165,16 +347,16 @@
       }
       const s = document.createElement('script');
       s.src = url;
-      s.crossOrigin = 'anonymous';
       s.dataset.iatSrc = url;
       s.onload  = () => { s.dataset.iatLoaded = '1'; resolve(); };
-      s.onerror = reject;
+      s.onerror = () => reject(new Error('Failed to load ' + url));
       document.head.appendChild(s);
     });
   }
-  async function ensureReact() {
+  async function ensureDeps() {
     if (!window.React)    await loadOnce(REACT_URL);
     if (!window.ReactDOM) await loadOnce(REACT_DOM_URL);
+    if (!window.htm)      await loadOnce(HTM_URL);
   }
 
   // ── Launcher ──────────────────────────────────────────────────────────────
@@ -195,18 +377,8 @@
     if (document.getElementById(OVERLAY_ID)) return;
     const overlay = document.createElement('div');
     overlay.id = OVERLAY_ID;
-    overlay.innerHTML = `
-      <div class="iat-modal" role="dialog" aria-modal="true" aria-label="Allocation Tool">
-        <div class="iat-modal-header">
-          <div class="iat-modal-icon">A</div>
-          <div class="iat-modal-title">Allocation Tool<span class="iat-modal-subtitle">running inside Intacct · session-authenticated</span></div>
-          <button class="iat-close" type="button" aria-label="Close">×</button>
-        </div>
-        <div id="${ROOT_ID}"></div>
-      </div>
-    `;
+    overlay.innerHTML = '<div class="iat-modal" role="dialog" aria-modal="true" aria-label="Allocation Tool"><div id="' + ROOT_ID + '" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div></div>';
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(); });
-    overlay.querySelector('.iat-close').addEventListener('click', closeOverlay);
     document.body.appendChild(overlay);
 
     escListener = (e) => { if (e.key === 'Escape') closeOverlay(); };
@@ -223,102 +395,271 @@
     }
   }
 
-  // ── Bootstrap: load deps, preload reference lists, render app ────────────
+  // ── Bootstrap: load deps, preload reference lists, render React app ─────
   async function bootstrapApp() {
     const root = document.getElementById(ROOT_ID);
     if (!root) return;
 
-    // Loading state
-    root.innerHTML = `
-      <div class="iat-loading">
-        <div class="iat-spinner"></div>
-        <div class="iat-loading-msg" data-loading-msg>Loading dependencies…</div>
-        <div class="iat-loading-detail" data-loading-detail></div>
-      </div>
-    `;
+    root.innerHTML =
+      '<div class="iat-loading">' +
+        '<div class="iat-spinner"></div>' +
+        '<div class="iat-loading-msg" data-loading-msg>Loading dependencies…</div>' +
+        '<div class="iat-loading-detail" data-loading-detail></div>' +
+      '</div>';
     const setMsg    = (m) => { const el = root.querySelector('[data-loading-msg]');    if (el) el.textContent = m; };
     const setDetail = (m) => { const el = root.querySelector('[data-loading-detail]'); if (el) el.textContent = m; };
 
     try {
-      await ensureReact();
+      await ensureDeps();
       setMsg('Loading Intacct reference data…');
 
       const C = window.IntacctSageClient;
-      const lists = ['departments', 'locations', 'projects', 'classes', 'glAccounts', 'statAccounts', 'periods', 'journals'];
+      const labels = ['departments', 'locations', 'projects', 'classes', 'GL accounts', 'stat accounts', 'periods', 'journals'];
       let done = 0;
-      const tick = (name) => () => {
-        done += 1;
-        setDetail(done + ' / ' + lists.length + ' · ' + name);
-      };
+      const tick = (label) => () => { done += 1; setDetail(done + ' / ' + labels.length + ' · ' + label); };
       const [departments, locations, projects, classes, glAccounts, statAccounts, periods, journals] =
         await Promise.all([
-          C.getDepartments().then(r => (tick('departments')(),  r)),
-          C.getLocations().then(r =>   (tick('locations')(),    r)),
-          C.getProjects().then(r =>    (tick('projects')(),     r)),
-          C.getClasses().then(r =>     (tick('classes')(),      r)),
-          C.getGlAccounts().then(r =>  (tick('GL accounts')(),  r)),
-          C.getStatAccounts().then(r =>(tick('stat accounts')(),r)),
-          C.getPeriods().then(r =>     (tick('periods')(),      r)),
-          C.getJournals().then(r =>    (tick('journals')(),     r)),
+          C.getDepartments() .then(r => (tick('departments')(),    r)),
+          C.getLocations()   .then(r => (tick('locations')(),      r)),
+          C.getProjects()    .then(r => (tick('projects')(),       r)),
+          C.getClasses()     .then(r => (tick('classes')(),        r)),
+          C.getGlAccounts()  .then(r => (tick('GL accounts')(),    r)),
+          C.getStatAccounts().then(r => (tick('stat accounts')(),  r)),
+          C.getPeriods()     .then(r => (tick('periods')(),        r)),
+          C.getJournals()    .then(r => (tick('journals')(),       r)),
         ]);
 
       const data = { departments, locations, projects, classes, glAccounts, statAccounts, periods, journals };
-      window.__intacctAllocationData = data; // for debugging in console
-      renderApp(root, data);
+      window.__intacctAllocationData = data;
+      mountReactApp(root, data);
     } catch (err) {
       console.error('[IntacctAllocationTool] bootstrap failed:', err);
       root.innerHTML = '';
       const box = document.createElement('div');
       box.className = 'iat-error';
+      const safe = (s) => String(s == null ? '' : s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
       box.innerHTML =
         '<div class="iat-error-title">Failed to load reference data</div>' +
-        '<div class="iat-error-detail">' + (err && err.message ? String(err.message).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) : 'Unknown error') + '</div>';
+        '<div class="iat-error-detail">' + safe(err && err.message) + '</div>';
       root.appendChild(box);
     }
   }
 
-  // ── App render (skeleton — full UI port is next step) ────────────────────
-  // For now: a verification panel showing counts of each loaded list. Once
-  // this works in your tenant, we know the architecture is sound and we can
-  // start porting the full allocation-tool.html React UI on top of this.
-  function renderApp(rootEl, data) {
-    const cards = [
-      ['Departments',     data.departments.length,  data.departments[0]?.name     || ''],
-      ['Locations',       data.locations.length,    data.locations[0]?.name       || ''],
-      ['Projects',        data.projects.length,     data.projects[0]?.name        || ''],
-      ['Classes',         data.classes.length,      data.classes[0]?.name         || ''],
-      ['GL Accounts',     data.glAccounts.length,   data.glAccounts[0]?.name      || ''],
-      ['Stat Accounts',   data.statAccounts.length, data.statAccounts[0]?.name    || ''],
-      ['Periods',         data.periods.length,      data.periods[0]?.name         || ''],
-      ['Journals',        data.journals.length,     data.journals[0]?.name        || ''],
-    ];
+  // ── React app: frame + Step 1 ────────────────────────────────────────────
+  function mountReactApp(rootEl, data) {
+    const React    = window.React;
+    const ReactDOM = window.ReactDOM;
+    const htm      = window.htm;
+    const html     = htm.bind(React.createElement);
+    const { useState, useMemo, useEffect } = React;
 
-    const cardHtml = cards.map(([label, count, sample]) => `
-      <div class="iat-verify-card">
-        <div class="iat-verify-card-label">${label}</div>
-        <div class="iat-verify-card-value">${count.toLocaleString()}</div>
-        ${sample ? '<div class="iat-verify-card-detail">e.g. ' + escapeHtml(sample) + '</div>' : ''}
-      </div>
-    `).join('');
+    function App() {
+      const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'light');
+      const [activeStep, setActiveStep] = useState(1);
+      const [periodName, setPeriodName] = useState('');
 
-    rootEl.innerHTML = `
-      <div class="iat-verify">
-        <h2>Architecture verified</h2>
-        <p class="iat-verify-lead">All eight reference lists loaded directly from Sage Intacct via the same-origin AJAX gateway. No proxy server, no embedded credentials. The full allocation tool UI ports on top of this.</p>
-        <div class="iat-verify-grid">${cardHtml}</div>
-        <div class="iat-verify-foot">
-          <strong>What this confirms:</strong> the page-script merge fields are flowing,
-          <code>window.IntacctSageClient.getDepartments()</code> &amp; friends work end-to-end,
-          localStorage caching is active (refresh this overlay — it'll be instant the second time),
-          and the launcher + overlay shell is sized correctly inside Intacct's frame.
-          Sample data on <code>window.__intacctAllocationData</code>.
+      useEffect(() => { localStorage.setItem(THEME_KEY, theme); }, [theme]);
+
+      const selectedPeriod = useMemo(
+        () => data.periods.find(p => p.name === periodName) || null,
+        [periodName]
+      );
+
+      // Step completion state — Step 1 is "done" once a period is picked.
+      const stepStatus = (n) => {
+        if (n === 1) return periodName ? 'done' : (activeStep === 1 ? 'active' : '');
+        if (n === activeStep) return 'active';
+        return '';
+      };
+
+      const onPickPeriod = (e) => {
+        const v = e.target.value;
+        setPeriodName(v);
+        if (v && activeStep === 1) setActiveStep(2);
+      };
+
+      return html`
+        <div class="iat-app" data-theme=${theme}>
+          <header class="iat-app-header">
+            <div class="iat-app-icon">A</div>
+            <div class="iat-app-title">
+              Allocation Tool
+              <span class="iat-app-title-sub">Phase 1 · in-Intacct deployment</span>
+            </div>
+            <div class="iat-app-actions">
+              <button
+                class="iat-icon-btn"
+                type="button"
+                title=${theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                onClick=${() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              >${theme === 'dark' ? '☀' : '☾'}</button>
+              <button
+                class="iat-close-btn"
+                type="button"
+                aria-label="Close"
+                onClick=${closeOverlay}
+              >×</button>
+            </div>
+          </header>
+
+          <div class="iat-app-body">
+            <aside class="iat-sidebar">
+              <${StepNav} activeStep=${activeStep} done=${{ 1: !!periodName }} />
+
+              <${StepCard}
+                num=${1}
+                title="Period"
+                status=${stepStatus(1)}
+                onActivate=${() => setActiveStep(1)}
+              >
+                <label class="iat-label" for="iat-period-select">Reporting period</label>
+                <select
+                  id="iat-period-select"
+                  class="iat-select"
+                  value=${periodName}
+                  onChange=${onPickPeriod}
+                >
+                  <option value="">— select a period —</option>
+                  ${data.periods.map(p => html`
+                    <option key=${p.name} value=${p.name}>${p.name}</option>
+                  `)}
+                </select>
+                ${selectedPeriod ? html`
+                  <div class="iat-readout">
+                    <span class="iat-readout-strong">${selectedPeriod.name}</span>
+                    <br/>${selectedPeriod.startDate} → ${selectedPeriod.endDate}
+                  </div>
+                ` : null}
+              <//>
+
+              <${StepCard}
+                num=${2}
+                title="Source pool"
+                status=${stepStatus(2)}
+                onActivate=${() => periodName && setActiveStep(2)}
+                disabled=${!periodName}
+              >
+                <div class="iat-step-status">
+                  ${periodName ? 'Coming in Phase 2' : 'Pick a period first'}
+                </div>
+              <//>
+
+              <${StepCard}
+                num=${3}
+                title="Allocation basis"
+                status=${stepStatus(3)}
+                onActivate=${() => periodName && setActiveStep(3)}
+                disabled=${!periodName}
+              >
+                <div class="iat-step-status">Coming in Phase 3</div>
+              <//>
+
+              <${StepCard}
+                num=${4}
+                title="Target & post"
+                status=${stepStatus(4)}
+                onActivate=${() => periodName && setActiveStep(4)}
+                disabled=${!periodName}
+              >
+                <div class="iat-step-status">Coming in Phase 4</div>
+              <//>
+            </aside>
+
+            <main class="iat-content">
+              <${ContentPanel}
+                activeStep=${activeStep}
+                selectedPeriod=${selectedPeriod}
+                data=${data}
+              />
+            </main>
+          </div>
         </div>
-      </div>
-    `;
-  }
+      `;
+    }
 
-  function escapeHtml(s) {
-    return String(s == null ? '' : s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+    // Step indicator across the top of the sidebar.
+    function StepNav({ activeStep, done }) {
+      const dots = [1, 2, 3, 4].map(n => {
+        const cls = ['iat-stepnav-dot'];
+        if (done && done[n]) cls.push('done');
+        if (n === activeStep) cls.push('active');
+        return html`<span key=${'d' + n} class=${cls.join(' ')}>${n}</span>`;
+      });
+      // Interleave dots with separator lines
+      const items = [];
+      for (let i = 0; i < dots.length; i++) {
+        items.push(dots[i]);
+        if (i < dots.length - 1) {
+          const lineDone = done && done[i + 1];
+          items.push(html`<span key=${'l' + i} class=${'iat-stepnav-line' + (lineDone ? ' done' : '')}></span>`);
+        }
+      }
+      return html`<div class="iat-stepnav">${items}</div>`;
+    }
+
+    // Collapsible step card (passive in Phase 1 — full collapse toggle in later phases).
+    function StepCard({ num, title, status, onActivate, disabled, children }) {
+      const cls = 'iat-step' + (status === 'active' ? ' active' : status === 'done' ? ' done' : '');
+      const handleClick = (e) => {
+        if (disabled) return;
+        // Don't re-activate if clicking inside form controls
+        if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+        if (onActivate) onActivate();
+      };
+      return html`
+        <section class=${cls} onClick=${handleClick} style=${{ cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
+          <div class="iat-step-head">
+            <div class="iat-step-num">${status === 'done' ? '✓' : num}</div>
+            <div class="iat-step-title">${title}</div>
+          </div>
+          <div class="iat-step-body">${children}</div>
+        </section>
+      `;
+    }
+
+    // Right panel — empty for Phase 1 since the journal entry is a Phase 4 deliverable.
+    function ContentPanel({ activeStep, selectedPeriod, data }) {
+      if (!selectedPeriod) {
+        return html`
+          <div class="iat-content-empty">
+            <div class="iat-content-empty-icon">①</div>
+            <div class="iat-content-empty-title">Select a period to begin</div>
+            <div class="iat-content-empty-detail">
+              Pick a reporting period in the sidebar. Subsequent steps unlock once a period is selected.
+            </div>
+          </div>
+        `;
+      }
+      // Phase 1 placeholder — once a period is picked, show a confirmation summary
+      // until later phases fill in the source pool, basis, and journal entry views.
+      return html`
+        <div style=${{ maxWidth: '720px' }}>
+          <h2 style=${{ fontSize: '18px', fontWeight: 600, margin: '0 0 6px', letterSpacing: '-0.3px' }}>
+            ${selectedPeriod.name}
+          </h2>
+          <p style=${{ fontSize: '13px', color: 'var(--iat-fg-soft)', margin: '0 0 24px' }}>
+            ${selectedPeriod.startDate} through ${selectedPeriod.endDate}
+          </p>
+          <div style=${{
+            padding: '16px', border: '1px solid var(--iat-border)',
+            borderRadius: '8px', background: 'var(--iat-bg-soft)',
+            fontSize: '13px', color: 'var(--iat-fg-soft)', lineHeight: 1.55,
+          }}>
+            Period selected. The next phase wires up the <strong>source pool</strong>
+            selector — source GL account(s), dimension filters, and a live balance fetch
+            against this period.
+            <div style=${{ marginTop: '12px', fontSize: '11px', color: 'var(--iat-fg-muted)' }}>
+              Reference data loaded:&nbsp;
+              ${data.glAccounts.length} GL · ${data.statAccounts.length} stat · ${data.departments.length} depts ·
+              ${data.locations.length} locs · ${data.projects.length} projects · ${data.classes.length} classes ·
+              ${data.periods.length} periods · ${data.journals.length} journals
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    ReactDOM.createRoot(rootEl).render(html`<${App} />`);
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
@@ -328,5 +669,5 @@
   } else {
     renderLauncher();
   }
-  console.log('[IntacctAllocationTool] launcher attached — click bottom-right button to open');
+  console.log('[IntacctAllocationTool] launcher attached — Phase 1 (Frame + Step 1)');
 })();
