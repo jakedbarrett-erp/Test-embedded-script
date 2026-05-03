@@ -11,14 +11,16 @@
 //   5. Esc or X closes the overlay; localStorage caches list data so re-opens
 //      are instant.
 //
-// CURRENT STATUS: Phase 1 — Frame + Step 1 (Period selection).
+// CURRENT STATUS: Phase 2 — Frame + Step 1 (Period) + Step 2 (Source pool).
 //   • Header with theme toggle (light/dark, persisted)
 //   • 4-step navigation indicator
 //   • Sidebar layout (336px) with step cards
 //   • Step 1: Period selector wired to live Sage data via getPeriods()
-//   • Right panel: placeholder for journal entry display
-//   Steps 2–4 (Source, Basis, Target/Post) and saved-allocations panel are
-//   the next build phases.
+//   • Step 2: Source pool — account mode (single/range/multi), GL picker,
+//     dimension filters (location required), auto-fetch via getBalances()
+//   • Right panel: dynamic — period summary, then balance table with totals
+//   Steps 3–4 (Basis, Target/Post) and saved-allocations panel are the next
+//   build phases.
 //
 // Dependencies (all expected to live on the same GitHub Pages origin as this
 // file — derived automatically from this script's own src):
@@ -26,16 +28,6 @@
 //   react-dom.production.min.js      — ReactDOM 18.2 UMD build
 //   htm.umd.js                       — htm@3.1.1 (~1KB tagged-template helper)
 //   intacct-sage-client.js           — preloaded by the page script
-//
-// Self-hosting these on GitHub Pages avoids needing to add unpkg.com or
-// jsdelivr.net to Intacct's allowed-content list, and keeps the entire
-// dependency chain on one origin you control.
-//
-// One-time setup: download these three files into the same folder as the
-// rest of your scripts and push to GitHub Pages:
-//   curl -o react.production.min.js     https://unpkg.com/react@18.2.0/umd/react.production.min.js
-//   curl -o react-dom.production.min.js https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js
-//   curl -o htm.umd.js                  https://unpkg.com/htm@3.1.1/dist/htm.umd.js
 
 (function () {
   'use strict';
@@ -47,8 +39,6 @@
   const ROOT_ID     = 'iat-root';
   const THEME_KEY   = 'iat-theme';
 
-  // Derive the base URL from this script's own src so dependencies load from
-  // the same origin (GitHub Pages) without hard-coding the user/repo path.
   const SELF_SRC = (() => {
     if (document.currentScript && document.currentScript.src) return document.currentScript.src;
     const all = document.querySelectorAll('script[src*="intacct-allocation-tool"]');
@@ -59,11 +49,17 @@
   const REACT_DOM_URL = BASE_URL + 'react-dom.production.min.js';
   const HTM_URL       = BASE_URL + 'htm.umd.js';
 
-  // ── Defensive: Sage client must be present ───────────────────────────────
   if (!window.IntacctSageClient) {
     console.error('[IntacctAllocationTool] IntacctSageClient missing — load intacct-sage-client.js first');
     return;
   }
+
+  // ── Currency formatter (USD default; can be made currency-aware later) ───
+  const fmtMoney = new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+  const fmtNum = new Intl.NumberFormat('en-US');
 
   // ── Styles (scoped under #iat-* and .iat-* — cannot leak into Intacct) ──
   function injectStyles() {
@@ -257,17 +253,24 @@
         font-size: 13px; font-weight: 600; color: var(--iat-fg); flex: 1;
         letter-spacing: -0.1px;
       }
-      .iat-step-status {
-        font-size: 11px; color: var(--iat-fg-muted);
+      .iat-step-status { font-size: 11px; color: var(--iat-fg-muted); }
+      .iat-step-body { display: flex; flex-direction: column; gap: 10px; }
+      .iat-step-section {
+        display: flex; flex-direction: column; gap: 6px;
       }
-      .iat-step-body { display: flex; flex-direction: column; gap: 8px; }
+      .iat-step-section + .iat-step-section {
+        margin-top: 4px;
+        padding-top: 10px;
+        border-top: 1px solid var(--iat-border-soft);
+      }
 
       /* ── Form controls ────────────────────────────────────────────────── */
       .iat-label {
         font-size: 11px; font-weight: 600; color: var(--iat-fg-soft);
         text-transform: uppercase; letter-spacing: .04em;
       }
-      .iat-select {
+      .iat-label-req::after { content: ' *'; color: var(--iat-danger); }
+      .iat-select, .iat-input {
         width: 100%;
         padding: 8px 10px;
         background: var(--iat-bg);
@@ -277,9 +280,11 @@
         font-size: 13px; font-family: inherit;
         cursor: pointer;
         transition: border-color .12s, box-shadow .12s;
+        box-sizing: border-box;
       }
-      .iat-select:hover  { border-color: var(--iat-fg-muted); }
-      .iat-select:focus  { outline: none; border-color: var(--iat-accent); box-shadow: 0 0 0 3px var(--iat-accent-soft); }
+      .iat-input { cursor: text; }
+      .iat-select:hover, .iat-input:hover { border-color: var(--iat-fg-muted); }
+      .iat-select:focus, .iat-input:focus { outline: none; border-color: var(--iat-accent); box-shadow: 0 0 0 3px var(--iat-accent-soft); }
       .iat-readout {
         margin-top: 4px;
         padding: 8px 10px;
@@ -290,6 +295,67 @@
         color: var(--iat-fg-soft);
       }
       .iat-readout-strong { color: var(--iat-fg); font-weight: 500; }
+
+      /* ── Segmented control (mode toggle) ─────────────────────────────── */
+      .iat-seg {
+        display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+        background: var(--iat-bg-soft);
+        border: 1px solid var(--iat-border);
+        border-radius: 6px;
+        padding: 2px;
+        gap: 2px;
+      }
+      .iat-seg-btn {
+        background: transparent; border: none;
+        padding: 6px 10px;
+        font-size: 12px; font-weight: 500; color: var(--iat-fg-soft);
+        cursor: pointer; border-radius: 4px;
+        font-family: inherit;
+        transition: background .12s, color .12s;
+      }
+      .iat-seg-btn:hover { color: var(--iat-fg); }
+      .iat-seg-btn.active {
+        background: var(--iat-bg); color: var(--iat-fg);
+        box-shadow: 0 1px 2px rgba(0,0,0,.06);
+      }
+
+      /* ── Range inputs (two-up) ────────────────────────────────────────── */
+      .iat-range-row {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      }
+
+      /* ── Multi-select checkbox list ──────────────────────────────────── */
+      .iat-multilist {
+        max-height: 200px; overflow-y: auto;
+        border: 1px solid var(--iat-border);
+        border-radius: 6px;
+        background: var(--iat-bg);
+      }
+      .iat-multilist-row {
+        display: flex; align-items: center; gap: 8px;
+        padding: 6px 10px;
+        font-size: 12px; color: var(--iat-fg);
+        cursor: pointer;
+        border-bottom: 1px solid var(--iat-border-soft);
+      }
+      .iat-multilist-row:last-child { border-bottom: none; }
+      .iat-multilist-row:hover { background: var(--iat-bg-soft); }
+      .iat-multilist-row input { margin: 0; cursor: pointer; }
+      .iat-multilist-meta {
+        font-size: 11px; color: var(--iat-fg-muted);
+        padding: 6px 10px 0;
+      }
+      .iat-multilist-search {
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--iat-border-soft);
+      }
+      .iat-multilist-search input {
+        width: 100%; padding: 4px 8px;
+        border: 1px solid var(--iat-border); border-radius: 4px;
+        background: var(--iat-bg); color: var(--iat-fg);
+        font-size: 12px; font-family: inherit;
+        box-sizing: border-box;
+      }
 
       /* ── Right-panel placeholder ──────────────────────────────────────── */
       .iat-content-empty {
@@ -307,6 +373,57 @@
       .iat-content-empty-title { font-size: 14px; color: var(--iat-fg-soft); font-weight: 500; }
       .iat-content-empty-detail { font-size: 12px; max-width: 360px; line-height: 1.5; }
 
+      /* ── Content panel headings & sections ───────────────────────────── */
+      .iat-panel-h1 { font-size: 18px; font-weight: 600; color: var(--iat-fg); margin: 0 0 4px; letter-spacing: -0.3px; }
+      .iat-panel-sub { font-size: 13px; color: var(--iat-fg-soft); margin: 0 0 20px; }
+      .iat-panel-section + .iat-panel-section { margin-top: 24px; }
+      .iat-panel-h2 { font-size: 13px; font-weight: 600; color: var(--iat-fg-soft); margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+
+      /* ── Balance table ───────────────────────────────────────────────── */
+      .iat-table {
+        width: 100%; border-collapse: collapse; font-size: 13px;
+        background: var(--iat-bg-card);
+        border: 1px solid var(--iat-border);
+        border-radius: 8px; overflow: hidden;
+      }
+      .iat-table thead th {
+        text-align: left;
+        padding: 10px 14px;
+        background: var(--iat-bg-soft);
+        border-bottom: 1px solid var(--iat-border);
+        font-size: 11px; font-weight: 600; color: var(--iat-fg-soft);
+        text-transform: uppercase; letter-spacing: .04em;
+      }
+      .iat-table tbody td {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--iat-border-soft);
+        color: var(--iat-fg);
+      }
+      .iat-table tbody tr:last-child td { border-bottom: none; }
+      .iat-table tbody tr:hover { background: var(--iat-bg-soft); }
+      .iat-table .iat-num {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .iat-table tfoot td {
+        padding: 10px 14px;
+        background: var(--iat-bg-soft);
+        border-top: 2px solid var(--iat-border);
+        font-weight: 600; color: var(--iat-fg);
+      }
+
+      /* ── Filter chips ────────────────────────────────────────────────── */
+      .iat-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      .iat-chip {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 3px 8px;
+        background: var(--iat-accent-soft); color: var(--iat-accent);
+        border-radius: 100px;
+        font-size: 11px; font-weight: 500;
+      }
+      .iat-chip-key { color: var(--iat-fg-muted); font-weight: 400; margin-right: 2px; }
+
       /* ── Loading & error states ───────────────────────────────────────── */
       .iat-loading {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -317,17 +434,32 @@
         border: 3px solid var(--iat-border, #e4e4e7); border-top-color: var(--iat-accent, #C87055);
         animation: iat-spin 0.8s linear infinite;
       }
+      .iat-spinner-sm { width: 16px; height: 16px; border-width: 2px; display: inline-block; vertical-align: middle; }
       @keyframes iat-spin { to { transform: rotate(360deg); } }
       .iat-loading-msg { font-size: 13px; }
       .iat-loading-detail { font-size: 11px; color: var(--iat-fg-muted, #a1a1aa); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
+      .iat-inline-loading {
+        display: flex; align-items: center; gap: 10px;
+        padding: 16px; color: var(--iat-fg-soft);
+        background: var(--iat-bg-soft); border: 1px solid var(--iat-border);
+        border-radius: 8px; font-size: 13px;
+      }
+
       .iat-error {
-        margin: 32px; padding: 20px;
+        margin: 32px 0; padding: 16px;
         background: var(--iat-danger-soft, #fef2f2); border: 1px solid #fecaca; border-radius: 8px;
         color: var(--iat-danger, #991b1b);
       }
       .iat-error-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
-      .iat-error-detail { font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-word; }
+      .iat-error-detail { font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-word; white-space: pre-wrap; }
+
+      .iat-warning {
+        margin: 12px 0; padding: 12px;
+        background: var(--iat-warning-soft, #fef3c7); border: 1px solid #fde68a; border-radius: 6px;
+        color: var(--iat-warning, #92400e);
+        font-size: 12px;
+      }
     `;
     const s = document.createElement('style');
     s.id = STYLE_ID;
@@ -395,7 +527,7 @@
     }
   }
 
-  // ── Bootstrap: load deps, preload reference lists, render React app ─────
+  // ── Bootstrap ─────────────────────────────────────────────────────────────
   async function bootstrapApp() {
     const root = document.getElementById(ROOT_ID);
     if (!root) return;
@@ -445,7 +577,7 @@
     }
   }
 
-  // ── React app: frame + Step 1 ────────────────────────────────────────────
+  // ── React app ────────────────────────────────────────────────────────────
   function mountReactApp(rootEl, data) {
     const React    = window.React;
     const ReactDOM = window.ReactDOM;
@@ -453,10 +585,33 @@
     const html     = htm.bind(React.createElement);
     const { useState, useMemo, useEffect } = React;
 
+    // "Any" sentinel for optional dimension filters — we send undefined to
+    // the Sage client when this is selected.
+    const ANY = '';
+
     function App() {
+      // Phase 1: theme + step nav + period
       const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'light');
       const [activeStep, setActiveStep] = useState(1);
       const [periodName, setPeriodName] = useState('');
+
+      // Phase 2: source pool selection
+      const [sourceMode, setSourceMode]         = useState('single'); // 'single' | 'range' | 'multi'
+      const [sourceGL, setSourceGL]             = useState('');
+      const [rangeFrom, setRangeFrom]           = useState('');
+      const [rangeTo, setRangeTo]               = useState('');
+      const [multiAccounts, setMultiAccounts]   = useState([]); // array of GL ids
+      const [multiSearch, setMultiSearch]       = useState('');
+      const [sourceLoc, setSourceLoc]           = useState(ANY);
+      const [sourceDept, setSourceDept]         = useState(ANY);
+      const [sourceClass, setSourceClass]       = useState(ANY);
+      const [sourceProj, setSourceProj]         = useState(ANY);
+
+      // Phase 2: source balance results
+      const [sourceBalances, setSourceBalances] = useState([]);
+      const [sourceLoading, setSourceLoading]   = useState(false);
+      const [sourceError, setSourceError]       = useState(null);
+      const [sourceFetched, setSourceFetched]   = useState(false);
 
       useEffect(() => { localStorage.setItem(THEME_KEY, theme); }, [theme]);
 
@@ -465,9 +620,71 @@
         [periodName]
       );
 
-      // Step completion state — Step 1 is "done" once a period is picked.
+      // Build the params object for IntacctSageClient.getBalances. Returns
+      // null if the inputs aren't yet sufficient to fetch (no period, no
+      // location, or no account selection). Acts as the validity gate.
+      const sourceParams = useMemo(() => {
+        if (!selectedPeriod || !sourceLoc) return null;
+        let acc = null;
+        if (sourceMode === 'single') {
+          if (!sourceGL) return null;
+          acc = { accountMode: 'single', accountNo: sourceGL };
+        } else if (sourceMode === 'range') {
+          if (!rangeFrom || !rangeTo) return null;
+          acc = { accountMode: 'range', startAccountNo: rangeFrom, endAccountNo: rangeTo };
+        } else {
+          if (!multiAccounts.length) return null;
+          acc = { accountMode: 'multi', accounts: multiAccounts };
+        }
+        return Object.assign({
+          startDate:    selectedPeriod.startDate,
+          endDate:      selectedPeriod.endDate,
+          locationid:   sourceLoc,
+          departmentid: sourceDept || undefined,
+          classid:      sourceClass || undefined,
+          projectid:    sourceProj || undefined,
+        }, acc);
+      }, [selectedPeriod, sourceMode, sourceGL, rangeFrom, rangeTo, multiAccounts, sourceLoc, sourceDept, sourceClass, sourceProj]);
+
+      // Auto-fetch balances when params become valid (or change). Use cancel
+      // flag so a stale response from a prior request can't overwrite a
+      // newer one.
+      useEffect(() => {
+        if (!sourceParams) {
+          setSourceBalances([]);
+          setSourceFetched(false);
+          setSourceError(null);
+          return;
+        }
+        let cancelled = false;
+        setSourceLoading(true);
+        setSourceError(null);
+        window.IntacctSageClient.getBalances(sourceParams).then(rows => {
+          if (cancelled) return;
+          setSourceBalances(rows);
+          setSourceFetched(true);
+          setSourceLoading(false);
+        }).catch(err => {
+          if (cancelled) return;
+          setSourceError(err && err.message || String(err));
+          setSourceLoading(false);
+        });
+        return () => { cancelled = true; };
+      }, [sourceParams]);
+
+      const sourceTotal = useMemo(
+        () => sourceBalances.reduce((sum, r) => sum + (r.periodbalance || 0), 0),
+        [sourceBalances]
+      );
+
+      // Step completion: 1 done when period picked; 2 done when fetched
+      const stepDone = useMemo(() => ({
+        1: !!periodName,
+        2: sourceFetched && sourceBalances.length > 0,
+      }), [periodName, sourceFetched, sourceBalances.length]);
+
       const stepStatus = (n) => {
-        if (n === 1) return periodName ? 'done' : (activeStep === 1 ? 'active' : '');
+        if (stepDone[n]) return 'done';
         if (n === activeStep) return 'active';
         return '';
       };
@@ -478,13 +695,25 @@
         if (v && activeStep === 1) setActiveStep(2);
       };
 
+      const ctx = {
+        data, html, React,
+        sourceMode, setSourceMode,
+        sourceGL, setSourceGL,
+        rangeFrom, setRangeFrom, rangeTo, setRangeTo,
+        multiAccounts, setMultiAccounts, multiSearch, setMultiSearch,
+        sourceLoc, setSourceLoc, sourceDept, setSourceDept,
+        sourceClass, setSourceClass, sourceProj, setSourceProj,
+        sourceBalances, sourceLoading, sourceError, sourceFetched, sourceTotal,
+        sourceParams, selectedPeriod,
+      };
+
       return html`
         <div class="iat-app" data-theme=${theme}>
           <header class="iat-app-header">
             <div class="iat-app-icon">A</div>
             <div class="iat-app-title">
               Allocation Tool
-              <span class="iat-app-title-sub">Phase 1 · in-Intacct deployment</span>
+              <span class="iat-app-title-sub">Phase 2 · Source pool</span>
             </div>
             <div class="iat-app-actions">
               <button
@@ -493,18 +722,13 @@
                 title=${theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                 onClick=${() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               >${theme === 'dark' ? '☀' : '☾'}</button>
-              <button
-                class="iat-close-btn"
-                type="button"
-                aria-label="Close"
-                onClick=${closeOverlay}
-              >×</button>
+              <button class="iat-close-btn" type="button" aria-label="Close" onClick=${closeOverlay}>×</button>
             </div>
           </header>
 
           <div class="iat-app-body">
             <aside class="iat-sidebar">
-              <${StepNav} activeStep=${activeStep} done=${{ 1: !!periodName }} />
+              <${StepNav} activeStep=${activeStep} done=${stepDone} />
 
               <${StepCard}
                 num=${1}
@@ -513,16 +737,9 @@
                 onActivate=${() => setActiveStep(1)}
               >
                 <label class="iat-label" for="iat-period-select">Reporting period</label>
-                <select
-                  id="iat-period-select"
-                  class="iat-select"
-                  value=${periodName}
-                  onChange=${onPickPeriod}
-                >
+                <select id="iat-period-select" class="iat-select" value=${periodName} onChange=${onPickPeriod}>
                   <option value="">— select a period —</option>
-                  ${data.periods.map(p => html`
-                    <option key=${p.name} value=${p.name}>${p.name}</option>
-                  `)}
+                  ${data.periods.map(p => html`<option key=${p.name} value=${p.name}>${p.name}</option>`)}
                 </select>
                 ${selectedPeriod ? html`
                   <div class="iat-readout">
@@ -539,38 +756,32 @@
                 onActivate=${() => periodName && setActiveStep(2)}
                 disabled=${!periodName}
               >
-                <div class="iat-step-status">
-                  ${periodName ? 'Coming in Phase 2' : 'Pick a period first'}
-                </div>
+                <${SourceStepBody} ctx=${ctx} />
               <//>
 
               <${StepCard}
                 num=${3}
                 title="Allocation basis"
                 status=${stepStatus(3)}
-                onActivate=${() => periodName && setActiveStep(3)}
-                disabled=${!periodName}
+                onActivate=${() => stepDone[2] && setActiveStep(3)}
+                disabled=${!stepDone[2]}
               >
-                <div class="iat-step-status">Coming in Phase 3</div>
+                <div class="iat-step-status">${stepDone[2] ? 'Coming in Phase 3' : 'Complete the source pool first'}</div>
               <//>
 
               <${StepCard}
                 num=${4}
                 title="Target & post"
                 status=${stepStatus(4)}
-                onActivate=${() => periodName && setActiveStep(4)}
-                disabled=${!periodName}
+                onActivate=${() => stepDone[2] && setActiveStep(4)}
+                disabled=${!stepDone[2]}
               >
                 <div class="iat-step-status">Coming in Phase 4</div>
               <//>
             </aside>
 
             <main class="iat-content">
-              <${ContentPanel}
-                activeStep=${activeStep}
-                selectedPeriod=${selectedPeriod}
-                data=${data}
-              />
+              <${ContentPanel} activeStep=${activeStep} ctx=${ctx} />
             </main>
           </div>
         </div>
@@ -583,9 +794,8 @@
         const cls = ['iat-stepnav-dot'];
         if (done && done[n]) cls.push('done');
         if (n === activeStep) cls.push('active');
-        return html`<span key=${'d' + n} class=${cls.join(' ')}>${n}</span>`;
+        return html`<span key=${'d' + n} class=${cls.join(' ')}>${done && done[n] ? '✓' : n}</span>`;
       });
-      // Interleave dots with separator lines
       const items = [];
       for (let i = 0; i < dots.length; i++) {
         items.push(dots[i]);
@@ -597,13 +807,12 @@
       return html`<div class="iat-stepnav">${items}</div>`;
     }
 
-    // Collapsible step card (passive in Phase 1 — full collapse toggle in later phases).
     function StepCard({ num, title, status, onActivate, disabled, children }) {
       const cls = 'iat-step' + (status === 'active' ? ' active' : status === 'done' ? ' done' : '');
       const handleClick = (e) => {
         if (disabled) return;
-        // Don't re-activate if clicking inside form controls
-        if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+        const tag = e.target.tagName;
+        if (tag === 'SELECT' || tag === 'INPUT' || tag === 'BUTTON' || tag === 'LABEL' || tag === 'TEXTAREA') return;
         if (onActivate) onActivate();
       };
       return html`
@@ -617,8 +826,115 @@
       `;
     }
 
-    // Right panel — empty for Phase 1 since the journal entry is a Phase 4 deliverable.
-    function ContentPanel({ activeStep, selectedPeriod, data }) {
+    // ── Step 2 sidebar body: mode toggle + GL picker(s) + dim filters ────
+    function SourceStepBody({ ctx }) {
+      const { data, sourceMode, setSourceMode } = ctx;
+
+      return html`
+        <div class="iat-step-section">
+          <span class="iat-label">Account selection</span>
+          <div class="iat-seg">
+            ${['single', 'range', 'multi'].map(m => html`
+              <button
+                key=${m}
+                type="button"
+                class=${'iat-seg-btn' + (sourceMode === m ? ' active' : '')}
+                onClick=${() => setSourceMode(m)}
+              >${m === 'single' ? 'Single' : m === 'range' ? 'Range' : 'Multi'}</button>
+            `)}
+          </div>
+          ${sourceMode === 'single'  ? html`<${SingleGLPicker} ctx=${ctx} />` : null}
+          ${sourceMode === 'range'   ? html`<${RangeGLPicker}  ctx=${ctx} />` : null}
+          ${sourceMode === 'multi'   ? html`<${MultiGLPicker}  ctx=${ctx} />` : null}
+        </div>
+
+        <div class="iat-step-section">
+          <span class="iat-label">Dimension filters</span>
+          <label class="iat-label iat-label-req" for="iat-src-loc" style=${{ marginTop: '4px' }}>Location</label>
+          <${DimSelect} id="iat-src-loc" rows=${data.locations} value=${ctx.sourceLoc}     onChange=${ctx.setSourceLoc}     placeholder="— select location —" />
+          <label class="iat-label" for="iat-src-dept" style=${{ marginTop: '4px' }}>Department</label>
+          <${DimSelect} id="iat-src-dept" rows=${data.departments} value=${ctx.sourceDept}  onChange=${ctx.setSourceDept}    placeholder="Any" />
+          <label class="iat-label" for="iat-src-cls" style=${{ marginTop: '4px' }}>Class</label>
+          <${DimSelect} id="iat-src-cls" rows=${data.classes}     value=${ctx.sourceClass} onChange=${ctx.setSourceClass}   placeholder="Any" />
+          <label class="iat-label" for="iat-src-prj" style=${{ marginTop: '4px' }}>Project</label>
+          <${DimSelect} id="iat-src-prj" rows=${data.projects}    value=${ctx.sourceProj}  onChange=${ctx.setSourceProj}    placeholder="Any" />
+        </div>
+      `;
+    }
+
+    function SingleGLPicker({ ctx }) {
+      const { data, sourceGL, setSourceGL } = ctx;
+      return html`
+        <select class="iat-select" value=${sourceGL} onChange=${(e) => setSourceGL(e.target.value)}>
+          <option value="">— select GL account —</option>
+          ${data.glAccounts.map(g => html`<option key=${g.id} value=${g.id}>${g.id} · ${g.name}</option>`)}
+        </select>
+      `;
+    }
+
+    function RangeGLPicker({ ctx }) {
+      const { rangeFrom, setRangeFrom, rangeTo, setRangeTo } = ctx;
+      return html`
+        <div class="iat-range-row">
+          <input class="iat-input" placeholder="From" value=${rangeFrom} onChange=${(e) => setRangeFrom(e.target.value)} />
+          <input class="iat-input" placeholder="To"   value=${rangeTo}   onChange=${(e) => setRangeTo(e.target.value)} />
+        </div>
+      `;
+    }
+
+    function MultiGLPicker({ ctx }) {
+      const { data, multiAccounts, setMultiAccounts, multiSearch, setMultiSearch } = ctx;
+      const filtered = useMemo(() => {
+        const q = multiSearch.trim().toLowerCase();
+        if (!q) return data.glAccounts;
+        return data.glAccounts.filter(g =>
+          (g.id || '').toLowerCase().includes(q) ||
+          (g.name || '').toLowerCase().includes(q)
+        );
+      }, [multiSearch]);
+      const set = new Set(multiAccounts);
+      const toggle = (id) => {
+        const next = new Set(set);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        setMultiAccounts(Array.from(next));
+      };
+      return html`
+        <div class="iat-multilist">
+          <div class="iat-multilist-search">
+            <input
+              type="search"
+              placeholder="Filter ${fmtNum.format(data.glAccounts.length)} accounts…"
+              value=${multiSearch}
+              onChange=${(e) => setMultiSearch(e.target.value)}
+            />
+          </div>
+          ${filtered.slice(0, 200).map(g => html`
+            <label key=${g.id} class="iat-multilist-row">
+              <input type="checkbox" checked=${set.has(g.id)} onChange=${() => toggle(g.id)} />
+              <span style=${{ flex: 1 }}>${g.id} · ${g.name}</span>
+            </label>
+          `)}
+          ${filtered.length > 200 ? html`<div class="iat-multilist-meta">Showing first 200 of ${fmtNum.format(filtered.length)} matches — refine search to see more.</div>` : null}
+        </div>
+        <div class="iat-multilist-meta">${multiAccounts.length} selected</div>
+      `;
+    }
+
+    // Reusable dimension dropdown (Location / Dept / Class / Project) —
+    // empty value means "any" / no filter.
+    function DimSelect({ id, rows, value, onChange, placeholder }) {
+      return html`
+        <select id=${id} class="iat-select" value=${value} onChange=${(e) => onChange(e.target.value)}>
+          <option value="">${placeholder}</option>
+          ${rows.map(r => html`<option key=${r.id} value=${r.id}>${r.id} · ${r.name}</option>`)}
+        </select>
+      `;
+    }
+
+    // ── Right panel content dispatcher ───────────────────────────────────
+    function ContentPanel({ activeStep, ctx }) {
+      const { selectedPeriod, data } = ctx;
+
       if (!selectedPeriod) {
         return html`
           <div class="iat-content-empty">
@@ -630,31 +946,134 @@
           </div>
         `;
       }
-      // Phase 1 placeholder — once a period is picked, show a confirmation summary
-      // until later phases fill in the source pool, basis, and journal entry views.
-      return html`
-        <div style=${{ maxWidth: '720px' }}>
-          <h2 style=${{ fontSize: '18px', fontWeight: 600, margin: '0 0 6px', letterSpacing: '-0.3px' }}>
-            ${selectedPeriod.name}
-          </h2>
-          <p style=${{ fontSize: '13px', color: 'var(--iat-fg-soft)', margin: '0 0 24px' }}>
-            ${selectedPeriod.startDate} through ${selectedPeriod.endDate}
-          </p>
-          <div style=${{
-            padding: '16px', border: '1px solid var(--iat-border)',
-            borderRadius: '8px', background: 'var(--iat-bg-soft)',
-            fontSize: '13px', color: 'var(--iat-fg-soft)', lineHeight: 1.55,
-          }}>
-            Period selected. The next phase wires up the <strong>source pool</strong>
-            selector — source GL account(s), dimension filters, and a live balance fetch
-            against this period.
+
+      // Step 1 selected & active → period summary
+      if (activeStep === 1) {
+        return html`
+          <div style=${{ maxWidth: '720px' }}>
+            <h2 class="iat-panel-h1">${selectedPeriod.name}</h2>
+            <p class="iat-panel-sub">${selectedPeriod.startDate} → ${selectedPeriod.endDate}</p>
+            <div class="iat-readout">Period selected. Move to <strong>Step 2</strong> to choose the source pool.</div>
             <div style=${{ marginTop: '12px', fontSize: '11px', color: 'var(--iat-fg-muted)' }}>
-              Reference data loaded:&nbsp;
-              ${data.glAccounts.length} GL · ${data.statAccounts.length} stat · ${data.departments.length} depts ·
-              ${data.locations.length} locs · ${data.projects.length} projects · ${data.classes.length} classes ·
-              ${data.periods.length} periods · ${data.journals.length} journals
+              Reference data:&nbsp;
+              ${fmtNum.format(data.glAccounts.length)} GL · ${fmtNum.format(data.statAccounts.length)} stat ·
+              ${fmtNum.format(data.departments.length)} depts · ${fmtNum.format(data.locations.length)} locs ·
+              ${fmtNum.format(data.projects.length)} projects · ${fmtNum.format(data.classes.length)} classes ·
+              ${fmtNum.format(data.periods.length)} periods · ${fmtNum.format(data.journals.length)} journals
             </div>
           </div>
+        `;
+      }
+
+      // Step 2 active → source pool & balance results
+      if (activeStep === 2) {
+        return html`<${SourceContentPanel} ctx=${ctx} />`;
+      }
+
+      // Steps 3+ — placeholders for now
+      return html`
+        <div class="iat-content-empty">
+          <div class="iat-content-empty-icon">${activeStep}</div>
+          <div class="iat-content-empty-title">Step ${activeStep} — coming in a later phase</div>
+          <div class="iat-content-empty-detail">This phase is built out incrementally. Phase 3 wires up the basis selection; Phase 4 adds target GL and the journal posting flow.</div>
+        </div>
+      `;
+    }
+
+    // Step 2 right-panel: source summary + balance table
+    function SourceContentPanel({ ctx }) {
+      const {
+        selectedPeriod, sourceParams, sourceBalances, sourceLoading, sourceError, sourceFetched, sourceTotal,
+        sourceMode, sourceGL, rangeFrom, rangeTo, multiAccounts,
+        sourceLoc, sourceDept, sourceClass, sourceProj, data,
+      } = ctx;
+
+      const dimChip = (label, id, list) => {
+        if (!id) return null;
+        const row = list.find(r => r.id === id);
+        const name = row ? row.name : id;
+        return html`<span class="iat-chip"><span class="iat-chip-key">${label}</span>${name}</span>`;
+      };
+
+      const accountChips = (() => {
+        if (sourceMode === 'single' && sourceGL) {
+          const row = data.glAccounts.find(g => g.id === sourceGL);
+          return html`<span class="iat-chip"><span class="iat-chip-key">GL</span>${sourceGL}${row ? ' · ' + row.name : ''}</span>`;
+        }
+        if (sourceMode === 'range' && rangeFrom && rangeTo) {
+          return html`<span class="iat-chip"><span class="iat-chip-key">Range</span>${rangeFrom} → ${rangeTo}</span>`;
+        }
+        if (sourceMode === 'multi' && multiAccounts.length) {
+          return html`<span class="iat-chip"><span class="iat-chip-key">Multi</span>${multiAccounts.length} accounts</span>`;
+        }
+        return null;
+      })();
+
+      return html`
+        <div style=${{ maxWidth: '900px' }}>
+          <h2 class="iat-panel-h1">Source pool</h2>
+          <p class="iat-panel-sub">${selectedPeriod.name} · ${selectedPeriod.startDate} → ${selectedPeriod.endDate}</p>
+
+          <div class="iat-chip-row">
+            ${accountChips}
+            ${dimChip('Location',   sourceLoc,   data.locations)}
+            ${dimChip('Department', sourceDept,  data.departments)}
+            ${dimChip('Class',      sourceClass, data.classes)}
+            ${dimChip('Project',    sourceProj,  data.projects)}
+          </div>
+
+          ${!sourceParams ? html`
+            <div class="iat-warning" style=${{ marginTop: '20px' }}>
+              ${ !sourceLoc
+                  ? 'Pick a location to fetch balances. Location is required for the source pool.'
+                  : sourceMode === 'single' && !sourceGL ? 'Pick a GL account.'
+                  : sourceMode === 'range'  && (!rangeFrom || !rangeTo) ? 'Enter both range endpoints.'
+                  : sourceMode === 'multi'  && !multiAccounts.length ? 'Select at least one GL account.'
+                  : 'Complete the source pool inputs to fetch balances.' }
+            </div>
+          ` : sourceLoading ? html`
+            <div class="iat-inline-loading" style=${{ marginTop: '20px' }}>
+              <span class="iat-spinner iat-spinner-sm"></span>
+              <span>Fetching balances from Sage…</span>
+            </div>
+          ` : sourceError ? html`
+            <div class="iat-error">
+              <div class="iat-error-title">Balance fetch failed</div>
+              <div class="iat-error-detail">${sourceError}</div>
+            </div>
+          ` : sourceFetched ? html`
+            <div class="iat-panel-section">
+              <h3 class="iat-panel-h2">Balances · ${fmtNum.format(sourceBalances.length)} ${sourceBalances.length === 1 ? 'row' : 'rows'}</h3>
+              ${sourceBalances.length === 0 ? html`
+                <div class="iat-readout">No balances returned for this combination of filters. Try widening the dimension filters or picking different accounts.</div>
+              ` : html`
+                <table class="iat-table">
+                  <thead>
+                    <tr>
+                      <th style=${{ width: '120px' }}>Account</th>
+                      <th>Title</th>
+                      <th class="iat-num" style=${{ width: '160px' }}>Period balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${sourceBalances.map((r, i) => html`
+                      <tr key=${i}>
+                        <td style=${{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px' }}>${r.glaccountno}</td>
+                        <td>${r.gltitle || '—'}</td>
+                        <td class="iat-num">${fmtMoney.format(r.periodbalance || 0)}</td>
+                      </tr>
+                    `)}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="2">Total</td>
+                      <td class="iat-num">${fmtMoney.format(sourceTotal)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              `}
+            </div>
+          ` : null}
         </div>
       `;
     }
@@ -669,5 +1088,5 @@
   } else {
     renderLauncher();
   }
-  console.log('[IntacctAllocationTool] launcher attached — Phase 1 (Frame + Step 1)');
+  console.log('[IntacctAllocationTool] launcher attached — Phase 2 (Frame + Step 1 + Step 2)');
 })();
