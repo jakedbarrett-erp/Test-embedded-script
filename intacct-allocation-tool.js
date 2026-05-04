@@ -4,12 +4,12 @@
 // Architecture:
 //   1. Page script (in Intacct's customization editor) loads
 //      intacct-sage-client.js, then this file.
-//   2. This file injects a launcher button into Intacct's page.
-//   3. Click → fullscreen overlay opens (95vw × 95vh modal).
-//   4. Overlay opens with a loading state, preloads all reference lists via
-//      IntacctSageClient, then mounts the React UI.
-//   5. Esc or X closes the overlay; localStorage caches list data so re-opens
-//      are instant.
+//   2. This file mounts the allocation tool directly into the page on load,
+//      sized to fill the Intacct customization frame.
+//   3. The customization page IS the allocation tool — no launcher button,
+//      no modal overlay. Loading state shows while deps + reference data
+//      fetch, then the React UI replaces it in place.
+//   4. localStorage caches list data so re-loads are instant.
 //
 // CURRENT STATUS: Phase 4 — full end-to-end allocation flow.
 //   • Step 1: Period selector
@@ -35,8 +35,7 @@
 
   // ── IDs & constants ───────────────────────────────────────────────────────
   const STYLE_ID    = 'iat-style';
-  const LAUNCHER_ID = 'iat-launcher';
-  const OVERLAY_ID  = 'iat-overlay';
+  const OVERLAY_ID  = 'iat-app-frame';
   const ROOT_ID     = 'iat-root';
   const THEME_KEY   = 'iat-theme';
 
@@ -64,44 +63,13 @@
   function injectStyles() {
     if (document.getElementById(STYLE_ID)) return;
     const css = `
-      /* Launcher */
-      #${LAUNCHER_ID} {
-        position: fixed; right: 20px; bottom: 20px; z-index: 999998;
-        display: inline-flex; align-items: center; gap: 8px;
-        padding: 10px 16px;
-        background: #C87055; color: #fff;
-        border: none; border-radius: 100px; cursor: pointer;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
-        font-size: 13px; font-weight: 600;
-        box-shadow: 0 4px 14px rgba(200,112,85,.35);
-        transition: transform .12s ease, box-shadow .12s ease;
-      }
-      #${LAUNCHER_ID}:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(200,112,85,.45); }
-      #${LAUNCHER_ID} .iat-launcher-icon {
-        width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center;
-        background: rgba(255,255,255,.15); border-radius: 4px; font-size: 11px; font-weight: 700;
-      }
-
-      /* Overlay shell */
+      /* Full-frame container — fills the Intacct customization iframe */
       #${OVERLAY_ID} {
-        position: fixed; inset: 0; z-index: 999999;
-        background: rgba(15, 15, 20, 0.55);
-        backdrop-filter: blur(2px);
-        display: flex; align-items: center; justify-content: center;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
-      }
-      #${OVERLAY_ID} .iat-modal {
-        width: 95vw; height: 95vh;
+        position: fixed; inset: 0; z-index: 100;
         background: var(--iat-bg, #fff);
-        border-radius: 12px;
-        box-shadow: 0 20px 60px rgba(0,0,0,.35);
         display: flex; flex-direction: column;
         overflow: hidden;
-        animation: iat-modal-in .15s ease-out;
-      }
-      @keyframes iat-modal-in {
-        from { opacity: 0; transform: scale(0.98); }
-        to   { opacity: 1; transform: scale(1); }
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
       }
 
       /* Theme variables */
@@ -171,13 +139,6 @@
         transition: background .12s, border-color .12s, color .12s;
       }
       .iat-icon-btn:hover { background: var(--iat-bg-soft); color: var(--iat-fg); border-color: var(--iat-fg-muted); }
-      .iat-close-btn {
-        width: 32px; height: 32px; border: 1px solid var(--iat-border); background: var(--iat-bg-card);
-        color: var(--iat-fg-soft); cursor: pointer; border-radius: 6px;
-        display: inline-flex; align-items: center; justify-content: center;
-        font-size: 16px; line-height: 1;
-      }
-      .iat-close-btn:hover { background: var(--iat-bg-soft); color: var(--iat-fg); }
 
       /* Body */
       .iat-app-body {
@@ -541,40 +502,17 @@
     if (!window.htm)      await loadOnce(HTM_URL);
   }
 
-  // ── Launcher ──────────────────────────────────────────────────────────────
-  function renderLauncher() {
-    if (document.getElementById(LAUNCHER_ID)) return;
-    const btn = document.createElement('button');
-    btn.id = LAUNCHER_ID;
-    btn.type = 'button';
-    btn.innerHTML = '<span class="iat-launcher-icon">A</span><span>Allocation Tool</span>';
-    btn.addEventListener('click', openOverlay);
-    document.body.appendChild(btn);
-  }
-
-  // ── Overlay ──────────────────────────────────────────────────────────────
-  let escListener = null;
-
-  function openOverlay() {
+  // ── Mount ─────────────────────────────────────────────────────────────────
+  // Inject a single full-frame container into document.body and render the
+  // app inside it. Idempotent — if called twice, it just no-ops on the second
+  // call rather than double-mounting.
+  function mountApp() {
     if (document.getElementById(OVERLAY_ID)) return;
-    const overlay = document.createElement('div');
-    overlay.id = OVERLAY_ID;
-    overlay.innerHTML = '<div class="iat-modal" role="dialog" aria-modal="true" aria-label="Allocation Tool"><div id="' + ROOT_ID + '" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div></div>';
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(); });
-    document.body.appendChild(overlay);
-
-    escListener = (e) => { if (e.key === 'Escape') closeOverlay(); };
-    document.addEventListener('keydown', escListener);
-
+    const container = document.createElement('div');
+    container.id = OVERLAY_ID;
+    container.innerHTML = '<div id="' + ROOT_ID + '" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div>';
+    document.body.appendChild(container);
     bootstrapApp();
-  }
-
-  function closeOverlay() {
-    document.getElementById(OVERLAY_ID)?.remove();
-    if (escListener) {
-      document.removeEventListener('keydown', escListener);
-      escListener = null;
-    }
   }
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
@@ -1075,7 +1013,6 @@
                 title=${theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                 onClick=${() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               >${theme === 'dark' ? '☀' : '☾'}</button>
-              <button class="iat-close-btn" type="button" aria-label="Close" onClick=${closeOverlay}>×</button>
             </div>
           </header>
 
@@ -1651,7 +1588,6 @@
             </div>
             <div style=${{ marginTop: '20px', display: 'flex', gap: '10px' }}>
               <button class="iat-btn-primary" onClick=${resetForNewAllocation}>New allocation</button>
-              <button class="iat-btn-secondary" onClick=${closeOverlay}>Close</button>
             </div>
           </div>
         `;
@@ -1722,9 +1658,9 @@
   // ── Init ──────────────────────────────────────────────────────────────────
   injectStyles();
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', renderLauncher);
+    document.addEventListener('DOMContentLoaded', mountApp);
   } else {
-    renderLauncher();
+    mountApp();
   }
-  console.log('[IntacctAllocationTool] launcher attached — Phase 4 (full end-to-end allocation flow)');
+  console.log('[IntacctAllocationTool] mounting inline — Phase 4 (full end-to-end allocation flow)');
 })();
