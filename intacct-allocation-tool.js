@@ -485,6 +485,258 @@
 
       /* Two-column form for Step 4 sidebar (more compact) */
       .iat-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+      /* ─── Right-panel rework: panel cards + tables (mirrors original) ─── */
+      .iat-content {
+        padding: 16px 20px;
+        display: flex; flex-direction: column; gap: 14px;
+      }
+      .iat-app[data-theme="light"] .iat-content {
+        background-image:
+          linear-gradient(rgba(0,0,0,.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0,0,0,.045) 1px, transparent 1px);
+        background-size: 20px 20px;
+      }
+      .iat-app[data-theme="dark"] .iat-content {
+        background-image:
+          linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
+        background-size: 20px 20px;
+      }
+
+      .iat-panel-card {
+        background: var(--iat-bg-card);
+        border: 1px solid var(--iat-border);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+      }
+      .iat-panel-card-header {
+        padding: 10px 16px;
+        background: var(--iat-bg-soft);
+        cursor: pointer; user-select: none;
+        display: flex; flex-direction: column; gap: 0;
+        transition: background .1s, filter .1s;
+      }
+      .iat-panel-card-header:hover { filter: brightness(1.03); }
+      .iat-panel-card-header-row {
+        display: flex; align-items: center; gap: 8px; width: 100%;
+      }
+      .iat-panel-card-header.open .iat-panel-card-header-row {
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--iat-border);
+      }
+      .iat-panel-card-icon {
+        width: 14px; height: 14px; flex-shrink: 0;
+        color: var(--iat-fg-muted);
+      }
+      .iat-panel-card-title {
+        font-size: 13px; font-weight: 600; color: var(--iat-fg);
+        letter-spacing: -0.1px;
+      }
+      .iat-panel-card-sub {
+        font-size: 12px; color: var(--iat-fg-muted);
+        padding-top: 6px;
+      }
+      .iat-panel-card-chev {
+        margin-left: auto; flex-shrink: 0;
+        color: var(--iat-fg-muted);
+        transition: transform .2s;
+      }
+      .iat-panel-card-header.open .iat-panel-card-chev {
+        transform: rotate(90deg);
+      }
+      .iat-panel-card-body { display: block; }
+      .iat-panel-card-filter-chips {
+        display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+        padding-top: 6px;
+      }
+      .iat-panel-card-filter-label {
+        font-size: 12px; color: var(--iat-fg-muted);
+      }
+
+      /* data-table — used by Pool & Basis cards */
+      .iat-data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .iat-data-table th {
+        background: var(--iat-bg-soft); color: var(--iat-fg-muted);
+        font-size: 11px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: .03em;
+        padding: 8px 14px; text-align: left;
+        border-bottom: 1px solid var(--iat-border);
+      }
+      .iat-data-table th.r { text-align: right; }
+      .iat-data-table td {
+        padding: 8px 14px;
+        border-bottom: 1px solid var(--iat-border-soft);
+        color: var(--iat-fg); vertical-align: middle;
+      }
+      .iat-data-table td.r {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .iat-data-table tr:last-child td { border-bottom: none; }
+      .iat-data-table tbody tr:hover td { background: var(--iat-bg-soft); }
+      .iat-data-table .iat-total-row td {
+        background: var(--iat-bg-soft); font-weight: 600;
+        border-top: 1px solid var(--iat-border);
+        color: var(--iat-fg);
+      }
+
+      /* je-table — dark header, REALLOC/REVERSAL row tints */
+      .iat-je-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .iat-je-table th {
+        background: #18181b; color: #a1a1aa;
+        font-size: 11px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: .03em;
+        padding: 9px 14px; text-align: left;
+      }
+      .iat-app[data-theme="dark"] .iat-je-table th {
+        background: #0a0a0b; color: #71717a;
+      }
+      .iat-je-table th.r { text-align: right; }
+      .iat-je-table td {
+        padding: 8px 14px;
+        border-bottom: 1px solid var(--iat-border-soft);
+        color: var(--iat-fg); vertical-align: middle;
+      }
+      .iat-je-table td.r {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .iat-je-table tr:last-child td { border-bottom: none; }
+      .iat-je-table .iat-row-realloc td  { background: rgba(200,112,85,.07);  border-bottom-color: rgba(200,112,85,.12); }
+      .iat-je-table .iat-row-reversal td { background: rgba(59,130,246,.07);  border-bottom-color: rgba(59,130,246,.12); }
+      .iat-je-table tr.iat-row-realloc:hover td  { background: rgba(200,112,85,.13); }
+      .iat-je-table tr.iat-row-reversal:hover td { background: rgba(59,130,246,.13); }
+      .iat-je-table .iat-total-row td {
+        background: #18181b; color: #a1a1aa;
+        font-weight: 600;
+        border-top: 1px solid rgba(255,255,255,.06);
+      }
+      .iat-app[data-theme="dark"] .iat-je-table .iat-total-row td {
+        background: #0a0a0b; color: #71717a;
+      }
+      .iat-je-table .iat-total-row td.r { color: #fafafa; }
+
+      /* JE chips */
+      .iat-chip-realloc {
+        display: inline-flex; align-items: center;
+        padding: 2px 6px; border-radius: 4px;
+        font-size: 11px; font-weight: 500;
+        background: var(--iat-accent-soft); color: var(--iat-accent);
+      }
+      .iat-chip-reversal {
+        display: inline-flex; align-items: center;
+        padding: 2px 6px; border-radius: 4px;
+        font-size: 11px; font-weight: 500;
+        background: rgba(59,130,246,.10); color: #3b82f6;
+      }
+      .iat-app[data-theme="dark"] .iat-chip-reversal {
+        background: rgba(59,130,246,.15); color: #93c5fd;
+      }
+      .iat-chip-dim {
+        display: inline-flex; align-items: center;
+        padding: 2px 6px; border-radius: 4px;
+        font-size: 11px; font-weight: 500;
+        background: var(--iat-bg-soft); color: var(--iat-fg-soft);
+      }
+
+      /* PctBar */
+      .iat-pct-bar {
+        width: 100%; background: var(--iat-border);
+        border-radius: 9999px; height: 5px; overflow: hidden;
+      }
+      .iat-pct-bar-fill {
+        height: 100%; border-radius: 9999px;
+        background: var(--iat-accent);
+        transition: width .5s ease;
+      }
+
+      /* Action bar (bottom of JE preview card) */
+      .iat-action-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 16px;
+        background: var(--iat-bg-soft);
+        border-top: 1px solid var(--iat-border);
+      }
+      .iat-balance-ok {
+        font-size: 12px; font-weight: 600;
+        color: var(--iat-success);
+        display: flex; align-items: center; gap: 5px;
+      }
+      .iat-balance-off {
+        font-size: 12px; font-weight: 600;
+        color: var(--iat-danger);
+        display: flex; align-items: center; gap: 5px;
+      }
+      .iat-action-buttons { display: flex; gap: 8px; }
+      .iat-btn-ghost {
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        padding: 8px 14px; border-radius: 5px;
+        background: var(--iat-bg-soft); color: var(--iat-fg-soft);
+        border: 1px solid var(--iat-border);
+        font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
+        transition: background .12s, color .12s, border-color .12s;
+      }
+      .iat-btn-ghost:hover:not(:disabled) {
+        background: var(--iat-border-soft); color: var(--iat-fg);
+        border-color: var(--iat-fg-muted);
+      }
+      .iat-btn-post {
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        padding: 9px 20px; border-radius: 5px;
+        background: var(--iat-accent); color: #fff; border: none;
+        font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+        transition: filter .12s;
+      }
+      .iat-btn-post:hover:not(:disabled) { filter: brightness(1.1); }
+      .iat-btn-post:disabled { opacity: .4; cursor: not-allowed; }
+
+      /* Empty state inside a panel-card */
+      .iat-panel-empty {
+        text-align: center; padding: 36px 20px;
+        color: var(--iat-fg-muted);
+      }
+      .iat-panel-empty-icon {
+        font-size: 28px; opacity: .4; margin-bottom: 10px;
+      }
+      .iat-panel-empty-text {
+        font-size: 13px; line-height: 1.6; color: var(--iat-fg-muted);
+      }
+
+      /* JE form row above the table */
+      .iat-je-form-row {
+        padding: 12px 16px 14px;
+        display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 10px;
+      }
+      .iat-je-form-row .iat-label { margin-bottom: 4px; }
+
+      /* Result banners (success/error) inside JE card */
+      .iat-banner-success {
+        margin: 12px 16px 0;
+        background: var(--iat-success-soft);
+        border: 1px solid var(--iat-success);
+        border-radius: 6px; overflow: hidden;
+      }
+      .iat-banner-success-row {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 12px;
+        font-size: 12px; font-weight: 600; color: var(--iat-success);
+      }
+      .iat-banner-error {
+        margin: 12px 16px 0;
+        background: var(--iat-danger-soft);
+        border: 1px solid var(--iat-danger);
+        border-radius: 6px; overflow: hidden;
+      }
+      .iat-banner-error-row {
+        display: flex; align-items: flex-start; gap: 8px;
+        padding: 8px 12px;
+        font-size: 12px; font-weight: 600; color: var(--iat-danger);
+        word-break: break-word;
+      }
     `;
     const s = document.createElement('style');
     s.id = STYLE_ID;
@@ -620,6 +872,11 @@
           return next;
         });
       };
+
+      // Right-panel cards collapse independently. All three are open by
+      // default so the user sees the running result as they fill the form.
+      const [panelOpen, setPanelOpen] = useState({ pool: true, basis: true, je: true });
+      const togglePanel = (k) => setPanelOpen(p => ({ ...p, [k]: !p[k] }));
 
       // ── Phase 2 ─────────────────────────────────────────────────────────
       const [sourceMode, setSourceMode]         = useState('single');
@@ -1033,6 +1290,8 @@
         postingDate, setPostingDate,
         je, posting, postResult, canPost, postReason,
         handlePost, resetForNewAllocation,
+        // right-panel collapse
+        panelOpen, togglePanel,
         // shared
         selectedPeriod,
       };
@@ -1095,7 +1354,7 @@
             </aside>
 
             <main class="iat-content">
-              <${ContentPanel} activeStep=${activeStep} ctx=${ctx} />
+              <${RightPanel} ctx=${ctx} />
             </main>
           </div>
         </div>
@@ -1336,375 +1595,469 @@
         </div>
 
         <div class="iat-step-section">
-          <span class="iat-label">Posting</span>
-          <label class="iat-label iat-label-req" for="iat-tgt-jnl" style=${{ marginTop: '4px' }}>Journal type</label>
-          <select id="iat-tgt-jnl" class="iat-select" value=${ctx.journalSymbol}
-            onChange=${(e) => ctx.setJournalSymbol(e.target.value)}
-          >
-            <option value="">— select journal —</option>
-            ${data.journals.map(j => html`<option key=${j.id} value=${j.id}>${j.id} · ${j.name}</option>`)}
-          </select>
-          <label class="iat-label iat-label-req" for="iat-tgt-date" style=${{ marginTop: '4px' }}>Posting date</label>
-          <input id="iat-tgt-date" class="iat-input" type="date" value=${ctx.postingDate}
-            onChange=${(e) => ctx.setPostingDate(e.target.value)} />
-          <label class="iat-label" for="iat-tgt-title" style=${{ marginTop: '4px' }}>Batch title</label>
-          <input id="iat-tgt-title" class="iat-input" type="text" placeholder="Allocation — Q4 2025" value=${ctx.batchTitle}
-            onChange=${(e) => ctx.setBatchTitle(e.target.value)} />
-          <label class="iat-label" for="iat-tgt-desc" style=${{ marginTop: '4px' }}>Line description (optional)</label>
+          <span class="iat-label">Line description (optional)</span>
           <input id="iat-tgt-desc" class="iat-input" type="text" placeholder="(auto-generated)" value=${ctx.jeDescription}
             onChange=${(e) => ctx.setJeDescription(e.target.value)} />
+          <div class="iat-step-status" style=${{ marginTop: '4px' }}>Posting date, journal type, and batch title live in the Journal Entry Preview panel.</div>
         </div>
       `;
     }
 
-    // ── Right panel dispatcher ───────────────────────────────────────────
-    function ContentPanel({ activeStep, ctx }) {
-      const { selectedPeriod, data } = ctx;
-      if (!selectedPeriod) {
-        return html`
-          <div class="iat-content-empty">
-            <div class="iat-content-empty-icon">①</div>
-            <div class="iat-content-empty-title">Select a period to begin</div>
-            <div class="iat-content-empty-detail">Pick a reporting period in the sidebar. Subsequent steps unlock once a period is selected.</div>
-          </div>
-        `;
+    // ── Right panel: three stacked panel-cards (mirrors original UI) ──
+    function RightPanel({ ctx }) {
+      return html`
+        <${PoolPanel}  ctx=${ctx} />
+        <${BasisPanel} ctx=${ctx} />
+        <${JePanel}    ctx=${ctx} />
+      `;
+    }
+
+    // SVG icons used in the panel-card headers (greyscale, currentColor).
+    // Each branch returns a self-contained <svg> with explicit attributes —
+    // we avoid spreading because htm's spread doesn't normalize `class` →
+    // `className` for React.
+    function PanelIcon({ name }) {
+      if (name === 'db') {
+        return html`<svg class="iat-panel-card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`;
       }
-      if (activeStep === 1) {
-        return html`
-          <div style=${{ maxWidth: '720px' }}>
-            <h2 class="iat-panel-h1">${selectedPeriod.name}</h2>
-            <p class="iat-panel-sub">${selectedPeriod.startDate} → ${selectedPeriod.endDate}</p>
-            <div class="iat-readout">Period selected. Move to <strong>Step 2</strong> to choose the source pool.</div>
-          </div>
-        `;
+      if (name === 'chart') {
+        return html`<svg class="iat-panel-card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`;
       }
-      if (activeStep === 2) return html`<${SourceContentPanel} ctx=${ctx} />`;
-      if (activeStep === 3) return html`<${BasisContentPanel}  ctx=${ctx} />`;
-      if (activeStep === 4) return html`<${PostContentPanel}   ctx=${ctx} />`;
+      if (name === 'file') {
+        return html`<svg class="iat-panel-card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`;
+      }
       return null;
     }
 
-    function renderDimChip(label, id, list) {
-      if (!id) return null;
-      const row = list.find(r => r.id === id);
-      const name = row ? row.name : id;
-      return html`<span class="iat-chip"><span class="iat-chip-key">${label}</span>${name}</span>`;
+    // Reusable panel-card with a clickable header row, optional sub line,
+    // optional filter chips strip, and a body that hides when collapsed.
+    function PanelCard({ icon, title, sub, filterChips, open, onToggle, children }) {
+      return html`
+        <section class="iat-panel-card">
+          <div class=${'iat-panel-card-header' + (open ? ' open' : '')} onClick=${onToggle}>
+            <div class="iat-panel-card-header-row">
+              <${PanelIcon} name=${icon} />
+              <span class="iat-panel-card-title">${title}</span>
+              <svg class="iat-panel-card-chev" width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </div>
+            ${sub ? html`<span class="iat-panel-card-sub">${sub}</span>` : null}
+            ${filterChips ? html`<div class="iat-panel-card-filter-chips">${filterChips}</div>` : null}
+          </div>
+          ${open ? html`<div class="iat-panel-card-body">${children}</div>` : null}
+        </section>
+      `;
     }
 
-    // ── Step 2 right panel ───────────────────────────────────────────────
-    function SourceContentPanel({ ctx }) {
-      const {
-        selectedPeriod, sourceParams, sourceBalances, sourceLoading, sourceError, sourceFetched, sourceTotal,
-        sourceMode, sourceGL, rangeFrom, rangeTo, multiAccounts,
-        sourceLoc, sourceDept, sourceClass, sourceProj, data,
-      } = ctx;
-
-      const accountChips = (() => {
-        if (sourceMode === 'single' && sourceGL) {
-          const row = data.glAccounts.find(g => g.id === sourceGL);
-          return html`<span class="iat-chip"><span class="iat-chip-key">GL</span>${sourceGL}${row ? ' · ' + row.name : ''}</span>`;
-        }
-        if (sourceMode === 'range' && rangeFrom && rangeTo) {
-          return html`<span class="iat-chip"><span class="iat-chip-key">Range</span>${rangeFrom} → ${rangeTo}</span>`;
-        }
-        if (sourceMode === 'multi' && multiAccounts.length) {
-          return html`<span class="iat-chip"><span class="iat-chip-key">Multi</span>${multiAccounts.length} accounts</span>`;
-        }
-        return null;
-      })();
-
+    // Render a stylized empty state inside a panel-card body.
+    function PanelEmpty({ icon, children }) {
       return html`
-        <div style=${{ maxWidth: '900px' }}>
-          <h2 class="iat-panel-h1">Source pool</h2>
-          <p class="iat-panel-sub">${selectedPeriod.name} · ${selectedPeriod.startDate} → ${selectedPeriod.endDate}</p>
-          <div class="iat-chip-row">
-            ${accountChips}
-            ${renderDimChip('Location',   sourceLoc,   data.locations)}
-            ${renderDimChip('Department', sourceDept,  data.departments)}
-            ${renderDimChip('Class',      sourceClass, data.classes)}
-            ${renderDimChip('Project',    sourceProj,  data.projects)}
-          </div>
-          ${!sourceParams ? html`
-            <div class="iat-warning" style=${{ marginTop: '20px' }}>
-              ${ !sourceLoc ? 'Pick a location to fetch balances. Location is required for the source pool.'
-                  : sourceMode === 'single' && !sourceGL ? 'Pick a GL account.'
-                  : sourceMode === 'range'  && (!rangeFrom || !rangeTo) ? 'Enter both range endpoints.'
-                  : sourceMode === 'multi'  && !multiAccounts.length ? 'Select at least one GL account.'
-                  : 'Complete the source pool inputs to fetch balances.' }
-            </div>
-          ` : sourceLoading ? html`
-            <div class="iat-inline-loading" style=${{ marginTop: '20px' }}>
-              <span class="iat-spinner iat-spinner-sm"></span>
-              <span>Fetching balances from Sage…</span>
-            </div>
-          ` : sourceError ? html`
-            <div class="iat-error">
-              <div class="iat-error-title">Balance fetch failed</div>
-              <div class="iat-error-detail">${sourceError}</div>
-            </div>
-          ` : sourceFetched ? html`
-            <div class="iat-panel-section">
-              <h3 class="iat-panel-h2">Balances · ${fmtNum.format(sourceBalances.length)} ${sourceBalances.length === 1 ? 'row' : 'rows'}</h3>
-              ${sourceBalances.length === 0 ? html`
-                <div class="iat-readout">No balances returned for this combination of filters.</div>
-              ` : html`
-                <table class="iat-table">
-                  <thead><tr><th style=${{ width: '120px' }}>Account</th><th>Title</th><th class="iat-num" style=${{ width: '160px' }}>Period balance</th></tr></thead>
-                  <tbody>
-                    ${sourceBalances.map((r, i) => html`
-                      <tr key=${i}>
-                        <td style=${{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px' }}>${r.glaccountno}</td>
-                        <td>${r.gltitle || '—'}</td>
-                        <td class="iat-num">${fmtMoney.format(r.periodbalance || 0)}</td>
-                      </tr>
-                    `)}
-                  </tbody>
-                  <tfoot><tr><td colspan="2">Total</td><td class="iat-num">${fmtMoney.format(sourceTotal)}</td></tr></tfoot>
-                </table>
-              `}
-            </div>
-          ` : null}
+        <div class="iat-panel-empty">
+          <div class="iat-panel-empty-icon">${icon}</div>
+          <div class="iat-panel-empty-text">${children}</div>
         </div>
       `;
     }
 
-    // ── Step 3 right panel ───────────────────────────────────────────────
-    function BasisContentPanel({ ctx }) {
-      const {
-        selectedPeriod, sourceTotal, sourceFetched,
-        basisParams, basisLoading, basisError, basisFetched, basisRows, basisTotal,
-        basisAcctType, basisMode, basisAccount, basisRangeFrom, basisRangeTo, basisMultiAccounts,
-        splitDimension, basisLoc, basisDept, basisClass, basisProj, data,
-      } = ctx;
-
-      const accounts = basisAcctType === 'stat' ? data.statAccounts : data.glAccounts;
-      const splitDimName = (SPLIT_DIMS.find(d => d.id === splitDimension) || {}).name || '—';
-
-      const acctChip = (() => {
-        const typeLabel = basisAcctType === 'stat' ? 'Stat' : 'GL';
-        if (basisMode === 'single' && basisAccount) {
-          const row = accounts.find(a => a.id === basisAccount);
-          return html`<span class="iat-chip"><span class="iat-chip-key">${typeLabel}</span>${basisAccount}${row ? ' · ' + row.name : ''}</span>`;
-        }
-        if (basisMode === 'range' && basisRangeFrom && basisRangeTo) {
-          return html`<span class="iat-chip"><span class="iat-chip-key">${typeLabel} range</span>${basisRangeFrom} → ${basisRangeTo}</span>`;
-        }
-        if (basisMode === 'multi' && basisMultiAccounts.length) {
-          return html`<span class="iat-chip"><span class="iat-chip-key">${typeLabel} multi</span>${basisMultiAccounts.length} accounts</span>`;
-        }
-        return null;
-      })();
-
-      const negativePool = sourceTotal < 0;
-
-      return html`
-        <div style=${{ maxWidth: '960px' }}>
-          <h2 class="iat-panel-h1">Allocation basis</h2>
-          <p class="iat-panel-sub">${selectedPeriod.name} · split by <strong>${splitDimName}</strong></p>
-
-          <div class="iat-minicards">
-            <div class="iat-minicard"><div class="iat-minicard-label">Source pool total</div><div class="iat-minicard-value">${fmtMoney.format(sourceTotal)}</div></div>
-            <div class="iat-minicard"><div class="iat-minicard-label">Basis total (abs)</div><div class="iat-minicard-value">${fmtBasis.format(basisTotal)}</div></div>
-            <div class="iat-minicard"><div class="iat-minicard-label">Split groups</div><div class="iat-minicard-value">${fmtNum.format(basisRows.length)}</div></div>
-          </div>
-
-          <div class="iat-chip-row">
-            ${acctChip}
-            ${splitDimension ? html`<span class="iat-chip"><span class="iat-chip-key">Split</span>${splitDimName}</span>` : null}
-            ${renderDimChip('Loc',   basisLoc,   data.locations)}
-            ${renderDimChip('Dept',  basisDept,  data.departments)}
-            ${renderDimChip('Class', basisClass, data.classes)}
-            ${renderDimChip('Proj',  basisProj,  data.projects)}
-          </div>
-
-          ${!sourceFetched ? html`
-            <div class="iat-warning" style=${{ marginTop: '20px' }}>Complete the source pool first — the allocation amount comes from its total.</div>
-          ` : !basisParams ? html`
-            <div class="iat-warning" style=${{ marginTop: '20px' }}>
-              ${ !splitDimension ? 'Pick a split dimension — the basis is grouped by this.'
-                  : basisMode === 'single' && !basisAccount ? 'Pick a basis account.'
-                  : basisMode === 'range'  && (!basisRangeFrom || !basisRangeTo) ? 'Enter both range endpoints for the basis accounts.'
-                  : basisMode === 'multi'  && !basisMultiAccounts.length ? 'Select at least one basis account.'
-                  : 'Complete the basis inputs to fetch.' }
-            </div>
-          ` : basisLoading ? html`
-            <div class="iat-inline-loading" style=${{ marginTop: '20px' }}>
-              <span class="iat-spinner iat-spinner-sm"></span>
-              <span>Fetching basis balances from Sage…</span>
-            </div>
-          ` : basisError ? html`
-            <div class="iat-error">
-              <div class="iat-error-title">Basis fetch failed</div>
-              <div class="iat-error-detail">${basisError}</div>
-            </div>
-          ` : basisFetched ? html`
-            ${negativePool ? html`<div class="iat-warning" style=${{ marginTop: '20px' }}>Source pool total is negative — Phase 4 will flip DR/CR appropriately when posting.</div>` : null}
-            <div class="iat-panel-section">
-              <h3 class="iat-panel-h2">Breakdown by ${splitDimName} · ${fmtNum.format(basisRows.length)} ${basisRows.length === 1 ? 'group' : 'groups'}</h3>
-              ${basisRows.length === 0 ? html`
-                <div class="iat-readout">No grouped rows came back. The basis accounts may not have any postings tagged with a <strong>${splitDimName}</strong> for this period, or the dimension filters may exclude everything.</div>
-              ` : html`
-                <table class="iat-table">
-                  <thead><tr><th>${splitDimName}</th><th class="iat-num" style=${{ width: '120px' }}>Basis</th><th style=${{ width: '160px' }}>Share</th><th class="iat-num" style=${{ width: '160px' }}>Allocation</th></tr></thead>
-                  <tbody>
-                    ${basisRows.map((r, i) => html`
-                      <tr key=${r.id || i}>
-                        <td>
-                          <div style=${{ fontWeight: 500 }}>${r.name}</div>
-                          <div style=${{ fontSize: '11px', color: 'var(--iat-fg-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>${r.id}</div>
-                        </td>
-                        <td class="iat-num">${fmtBasis.format(r.value)}</td>
-                        <td>
-                          <div class="iat-pctbar-cell">
-                            <div class="iat-pctbar"><div class="iat-pctbar-fill" style=${{ width: (r.pct * 100).toFixed(2) + '%' }}></div></div>
-                            <div class="iat-pctbar-label"><span></span><span>${fmtPct.format(r.pct)}</span></div>
-                          </div>
-                        </td>
-                        <td class="iat-num">${fmtMoney.format(r.alloc)}</td>
-                      </tr>
-                    `)}
-                  </tbody>
-                  <tfoot><tr><td>Total</td><td class="iat-num">${fmtBasis.format(basisTotal)}</td><td>${fmtPct.format(1)}</td><td class="iat-num">${fmtMoney.format(sourceTotal)}</td></tr></tfoot>
-                </table>
-              `}
-            </div>
-          ` : null}
-        </div>
-      `;
-    }
-
-    // ── Step 4 right panel: JE preview + Post ───────────────────────────
-    function PostContentPanel({ ctx }) {
-      const {
-        selectedPeriod, je, posting, postResult, canPost, postReason,
-        handlePost, resetForNewAllocation,
-        effectiveTargetGL, journalSymbol, postingDate, batchTitle,
-        data, splitDimension,
-      } = ctx;
-
-      const splitDimName = (SPLIT_DIMS.find(d => d.id === splitDimension) || {}).name || '—';
-
-      // Helper: human-readable dimension cell from a line
-      function dimsCell(line) {
-        const parts = [];
-        if (line.dept) {
-          const r = data.departments.find(d => d.id === line.dept);
-          parts.push(html`<span><span style=${{ color: 'var(--iat-fg-muted)' }}>D:</span> ${r ? r.name : line.dept}</span>`);
-        }
-        if (line.loc) {
-          const r = data.locations.find(d => d.id === line.loc);
-          parts.push(html`<span><span style=${{ color: 'var(--iat-fg-muted)' }}>L:</span> ${r ? r.name : line.loc}</span>`);
-        }
-        if (line.proj) {
-          const r = data.projects.find(d => d.id === line.proj);
-          parts.push(html`<span><span style=${{ color: 'var(--iat-fg-muted)' }}>P:</span> ${r ? r.name : line.proj}</span>`);
-        }
-        if (line.cls) {
-          const r = data.classes.find(d => d.id === line.cls);
-          parts.push(html`<span><span style=${{ color: 'var(--iat-fg-muted)' }}>C:</span> ${r ? r.name : line.cls}</span>`);
-        }
-        if (parts.length === 0) return html`<span style=${{ color: 'var(--iat-fg-muted)' }}>—</span>`;
-        // Interleave parts with bullet separators
-        const out = [];
-        parts.forEach((p, i) => { if (i) out.push(html`<span key=${'sep' + i} style=${{ color: 'var(--iat-fg-muted)', margin: '0 6px' }}>·</span>`); out.push(p); });
-        return html`<span style=${{ fontSize: '11px' }}>${out}</span>`;
+    // Render a small filter-chip row for whichever dimensions are set.
+    function dimFilterChips({ loc, dept, cls, proj, data }) {
+      const items = [];
+      if (loc) {
+        const r = data.locations.find(x => x.id === loc);
+        items.push(html`<span key="loc" class="iat-chip-dim">Loc: ${r ? r.name : loc}</span>`);
       }
+      if (dept) {
+        const r = data.departments.find(x => x.id === dept);
+        items.push(html`<span key="dept" class="iat-chip-dim">Dept: ${r ? r.name : dept}</span>`);
+      }
+      if (cls) {
+        const r = data.classes.find(x => x.id === cls);
+        items.push(html`<span key="cls" class="iat-chip-dim">Class: ${r ? r.name : cls}</span>`);
+      }
+      if (proj) {
+        const r = data.projects.find(x => x.id === proj);
+        items.push(html`<span key="proj" class="iat-chip-dim">Proj: ${r ? r.name : proj}</span>`);
+      }
+      if (!items.length) return null;
+      return html`
+        <span class="iat-panel-card-filter-label">Filtered by:</span>
+        ${items}
+      `;
+    }
 
-      function renderLineTable(lines, kind) {
-        if (!lines.length) return html`<div class="iat-readout">No ${kind} lines.</div>`;
-        return html`
-          <table class="iat-table">
-            <thead><tr><th style=${{ width: '110px' }}>Account</th><th>Description</th><th>Dimensions</th><th class="iat-num" style=${{ width: '140px' }}>Amount</th></tr></thead>
+    // ── Pool Account Balances panel ──────────────────────────────────────
+    function PoolPanel({ ctx }) {
+      const {
+        sourceParams, sourceBalances, sourceLoading, sourceError, sourceFetched, sourceTotal,
+        sourceLoc, sourceDept, sourceClass, sourceProj, data,
+        panelOpen, togglePanel,
+      } = ctx;
+
+      const filterChips = dimFilterChips({
+        loc: sourceLoc, dept: sourceDept, cls: sourceClass, proj: sourceProj, data,
+      });
+
+      // Group by GL account, summing period balance
+      const groups = {};
+      sourceBalances.forEach(r => {
+        const k = r.glaccountno;
+        if (!groups[k]) {
+          groups[k] = { amt: 0, title: r.gltitle || ((data.glAccounts.find(g => g.id === k) || {}).name || k) };
+        }
+        groups[k].amt += (r.periodbalance || 0);
+      });
+      const rows = Object.entries(groups).sort(([a], [b]) => String(a).localeCompare(String(b)));
+
+      let body;
+      if (sourceLoading) {
+        body = html`<${PanelEmpty} icon="⏳">Fetching balances from Sage Intacct…<//>`;
+      } else if (sourceError) {
+        body = html`<${PanelEmpty} icon="⚠">
+          <span style=${{ color: 'var(--iat-danger)' }}>Error fetching balances:<br/>
+            <span style=${{ fontSize: '11px', fontFamily: 'monospace' }}>${sourceError}</span>
+          </span>
+        <//>`;
+      } else if (!sourceParams || !sourceFetched) {
+        body = html`<${PanelEmpty} icon="📊">Select a GL account and location in Step 2<br/>to see the pool balances available to allocate.<//>`;
+      } else if (sourceBalances.length === 0) {
+        body = html`<${PanelEmpty} icon="∅">No balance found for this account<br/>in the selected period.<//>`;
+      } else {
+        body = html`
+          <table class="iat-data-table" style=${{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style=${{ width: '18%' }}/>
+              <col/>
+              <col style=${{ width: '14%' }}/>
+              <col style=${{ width: '20%' }}/>
+            </colgroup>
+            <thead>
+              <tr>
+                <th>GL Account</th>
+                <th>Account Name</th>
+                <th class="r">% of Pool</th>
+                <th class="r">Balance</th>
+              </tr>
+            </thead>
             <tbody>
-              ${lines.map((l, i) => html`
-                <tr key=${i}>
-                  <td style=${{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px' }}>${l.gl}</td>
-                  <td style=${{ fontSize: '12px' }}>${l.desc}</td>
-                  <td>${dimsCell(l)}</td>
-                  <td class="iat-num">${fmtMoney.format(l.amount)}</td>
+              ${rows.map(([glId, g]) => html`
+                <tr key=${glId}>
+                  <td style=${{ fontWeight: 600, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>${glId}</td>
+                  <td style=${{ color: 'var(--iat-fg-soft)' }}>${g.title}</td>
+                  <td class="r" style=${{ color: 'var(--iat-fg-soft)' }}>${sourceTotal !== 0 ? fmtPct.format(g.amt / sourceTotal) : '—'}</td>
+                  <td class="r" style=${{ fontWeight: 600 }}>${fmtMoney.format(g.amt)}</td>
                 </tr>
               `)}
+              ${rows.length > 1 ? html`
+                <tr class="iat-total-row">
+                  <td colspan="2" style=${{ color: 'var(--iat-fg-soft)' }}>Total Pool</td>
+                  <td class="r">100.0%</td>
+                  <td class="r">${fmtMoney.format(sourceTotal)}</td>
+                </tr>
+              ` : null}
             </tbody>
-            <tfoot><tr><td colspan="3">Total</td><td class="iat-num">${fmtMoney.format(lines.reduce((s, l) => s + l.amount, 0))}</td></tr></tfoot>
           </table>
         `;
       }
 
-      // Success result — show batch number and reset button
-      if (postResult && postResult.success) {
+      return html`
+        <${PanelCard}
+          icon="db"
+          title="Pool Account Balances"
+          filterChips=${filterChips}
+          open=${panelOpen.pool}
+          onToggle=${(e) => { e.stopPropagation(); togglePanel('pool'); }}
+        >${body}<//>
+      `;
+    }
+
+    // ── Basis Breakdown panel ────────────────────────────────────────────
+    function BasisPanel({ ctx }) {
+      const {
+        sourceTotal, basisParams, basisLoading, basisError, basisFetched, basisRows, basisTotal,
+        basisAcctType, basisMode, basisAccount, basisRangeFrom, basisRangeTo, basisMultiAccounts,
+        splitDimension, basisLoc, basisDept, basisClass, basisProj, data,
+        panelOpen, togglePanel,
+      } = ctx;
+
+      const accounts = basisAcctType === 'stat' ? data.statAccounts : data.glAccounts;
+      const splitDimName = (SPLIT_DIMS.find(d => d.id === splitDimension) || {}).name || '—';
+      const typeLabel = basisAcctType === 'stat' ? 'Stat' : 'GL';
+
+      // Sub line: account selector summary + "Split by X"
+      const sub = (() => {
+        if (basisMode === 'single' && basisAccount) {
+          const row = accounts.find(a => a.id === basisAccount);
+          return `${typeLabel} ${basisAccount}${row ? ' — ' + row.name : ''}  ·  Split by ${splitDimName}`;
+        }
+        if (basisMode === 'range' && basisRangeFrom && basisRangeTo) {
+          return `${typeLabel} accounts ${basisRangeFrom}–${basisRangeTo}  ·  Split by ${splitDimName}`;
+        }
+        if (basisMode === 'multi' && basisMultiAccounts.length) {
+          return `${typeLabel} · ${basisMultiAccounts.length} accounts  ·  Split by ${splitDimName}`;
+        }
+        return 'No basis selected';
+      })();
+
+      const filterChips = dimFilterChips({
+        loc: basisLoc, dept: basisDept, cls: basisClass, proj: basisProj, data,
+      });
+
+      let body;
+      if (basisLoading) {
+        body = html`<${PanelEmpty} icon="⏳">Fetching basis data from Sage Intacct…<//>`;
+      } else if (basisError) {
+        body = html`<${PanelEmpty} icon="⚠">
+          <span style=${{ color: 'var(--iat-danger)' }}>Error fetching basis data:<br/>
+            <span style=${{ fontSize: '11px', fontFamily: 'monospace' }}>${basisError}</span>
+          </span>
+        <//>`;
+      } else if (!basisParams || !basisFetched) {
+        body = html`<${PanelEmpty} icon="📈">Choose a basis account and split dimension in Step 3<br/>to preview the allocation weights.<//>`;
+      } else if (basisRows.length === 0) {
+        body = html`<${PanelEmpty} icon="∅">No basis data found for this account<br/>in the selected period.<//>`;
+      } else {
+        body = html`
+          <table class="iat-data-table" style=${{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style=${{ width: '14%' }}/>
+              <col/>
+              <col style=${{ width: '14%' }}/>
+              <col style=${{ width: '20%' }}/>
+              <col style=${{ width: '10%' }}/>
+              <col style=${{ width: '18%' }}/>
+            </colgroup>
+            <thead>
+              <tr>
+                <th>${splitDimName} ID</th>
+                <th>${splitDimName} Name</th>
+                <th class="r">Basis Value</th>
+                <th>Weight</th>
+                <th class="r">%</th>
+                <th class="r">Allocated Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${basisRows.map((r, i) => html`
+                <tr key=${r.id || ('__blank_' + i)}>
+                  <td style=${{
+                      fontWeight: r.id ? 600 : 400,
+                      color: r.id ? 'var(--iat-fg)' : 'var(--iat-fg-muted)',
+                      fontStyle: r.id ? 'normal' : 'italic',
+                      fontFamily: r.id ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : 'inherit',
+                    }}>
+                    ${r.id || 'Blank dimension'}
+                  </td>
+                  <td style=${{ color: 'var(--iat-fg-soft)' }}>${r.name && r.name !== r.id ? r.name : '—'}</td>
+                  <td class="r">${fmtBasis.format(r.value)}</td>
+                  <td style=${{ paddingTop: '9px', paddingBottom: '9px' }}>
+                    <div class="iat-pct-bar"><div class="iat-pct-bar-fill" style=${{ width: (r.pct * 100).toFixed(2) + '%' }}></div></div>
+                  </td>
+                  <td class="r" style=${{ color: 'var(--iat-fg-soft)' }}>${fmtPct.format(r.pct)}</td>
+                  <td class="r" style=${{ fontWeight: 600 }}>${sourceTotal !== 0 ? fmtMoney.format(r.alloc) : '—'}</td>
+                </tr>
+              `)}
+              ${basisRows.length > 0 ? html`
+                <tr class="iat-total-row">
+                  <td>Total</td>
+                  <td></td>
+                  <td class="r">${fmtBasis.format(basisRows.reduce((s, r) => s + r.value, 0))}</td>
+                  <td></td>
+                  <td class="r">${fmtPct.format(1)}</td>
+                  <td class="r">${sourceTotal !== 0 ? fmtMoney.format(sourceTotal) : '—'}</td>
+                </tr>
+              ` : null}
+            </tbody>
+          </table>
+        `;
+      }
+
+      return html`
+        <${PanelCard}
+          icon="chart"
+          title="Basis Breakdown"
+          sub=${sub}
+          filterChips=${filterChips}
+          open=${panelOpen.basis}
+          onToggle=${(e) => { e.stopPropagation(); togglePanel('basis'); }}
+        >${body}<//>
+      `;
+    }
+
+    // ── Journal Entry Preview panel (form row + combined table + action bar) ──
+    function JePanel({ ctx }) {
+      const {
+        selectedPeriod, je, posting, postResult, canPost, postReason,
+        handlePost, resetForNewAllocation,
+        journalSymbol, setJournalSymbol,
+        postingDate, setPostingDate,
+        batchTitle, setBatchTitle,
+        data,
+        panelOpen, togglePanel,
+      } = ctx;
+
+      // Render a single line as a row in the combined JE table.
+      function renderLine(line, idx, kind) {
+        const isDr = line.trType === 1;
+        const isRealloc = (kind === 'realloc');
+        const glRow = data.glAccounts.find(g => g.id === line.gl);
+        const glName = glRow ? glRow.name : null;
+
+        const cellChip = (label, id, list) => {
+          if (!id) return html`<span style=${{ color: 'var(--iat-fg-muted)' }}>—</span>`;
+          const r = list.find(x => x.id === id);
+          return html`<span class="iat-chip-dim" title=${r ? r.name : ''}>${id}</span>`;
+        };
+
         return html`
-          <div style=${{ maxWidth: '720px' }}>
-            <h2 class="iat-panel-h1">Journal entry posted</h2>
-            <p class="iat-panel-sub">${selectedPeriod.name} · ${postingDate}</p>
-            <div class="iat-result iat-result-success">
-              <div class="iat-result-success-title">✓ Posted to Sage Intacct</div>
-              <div class="iat-result-success-detail">
-                Batch <span class="iat-result-success-key">${postResult.key}</span> created in journal <strong>${journalSymbol}</strong>.
+          <tr key=${kind + '-' + idx} class=${isRealloc ? 'iat-row-realloc' : 'iat-row-reversal'}>
+            <td>
+              <span class=${isRealloc ? 'iat-chip-realloc' : 'iat-chip-reversal'}>
+                ${isRealloc ? 'REALLOC' : 'REVERSAL'}
+              </span>
+            </td>
+            <td style=${{ fontWeight: 600, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>${line.gl}</td>
+            <td style=${{ color: 'var(--iat-fg-soft)' }}>${glName && glName !== line.gl ? glName : '—'}</td>
+            <td style=${{ fontSize: '12px', color: 'var(--iat-fg-soft)' }}>${line.desc}</td>
+            <td>${cellChip('D', line.dept, data.departments)}</td>
+            <td>${cellChip('C', line.cls,  data.classes)}</td>
+            <td>${cellChip('P', line.proj, data.projects)}</td>
+            <td>${cellChip('L', line.loc,  data.locations)}</td>
+            <td class="r" style=${{ fontWeight: isDr ? 600 : 'normal', color: isDr ? 'inherit' : 'var(--iat-fg-muted)' }}>${isDr ? fmtMoney.format(line.amount) : '—'}</td>
+            <td class="r" style=${{ fontWeight: isDr ? 'normal' : 600, color: isDr ? 'var(--iat-fg-muted)' : 'inherit' }}>${isDr ? '—' : fmtMoney.format(line.amount)}</td>
+          </tr>
+        `;
+      }
+
+      // Form row above the table — Posting Date | Journal Type | Batch Title
+      const formRow = html`
+        <div class="iat-je-form-row">
+          <div>
+            <label class="iat-label" for="iat-je-date">Posting Date</label>
+            <input id="iat-je-date" class="iat-input" type="date" value=${postingDate}
+              onChange=${(e) => setPostingDate(e.target.value)} />
+          </div>
+          <div>
+            <label class="iat-label" for="iat-je-jnl">Journal Type</label>
+            <select id="iat-je-jnl" class="iat-select" value=${journalSymbol}
+              onChange=${(e) => setJournalSymbol(e.target.value)}>
+              <option value="">— select journal —</option>
+              ${data.journals.map(j => html`<option key=${j.id} value=${j.id}>${j.id} — ${j.name}</option>`)}
+            </select>
+          </div>
+          <div>
+            <label class="iat-label" for="iat-je-title">Batch Title</label>
+            <input id="iat-je-title" class="iat-input" type="text"
+              placeholder="Allocation — period name" value=${batchTitle}
+              onChange=${(e) => setBatchTitle(e.target.value)} />
+          </div>
+        </div>
+      `;
+
+      // Body for the JE card — depends on whether the JE is computable
+      let body;
+      if (!je) {
+        body = html`
+          ${formRow}
+          <${PanelEmpty} icon="📄">
+            ${postReason || html`Complete all three steps to preview<br/>the journal entry for Sage Intacct.`}
+          <//>
+        `;
+      } else {
+        const reallocCount = je.targetLines.length;
+        const reversalCount = je.creditLines.length;
+        body = html`
+          ${formRow}
+
+          <div style=${{ overflowX: 'auto', borderTop: '1px solid var(--iat-border)' }}>
+            <table class="iat-je-table" style=${{ tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style=${{ width: '5%', minWidth: '78px' }}/>
+                <col style=${{ width: '10%' }}/>
+                <col style=${{ width: '18%' }}/>
+                <col/>
+                <col style=${{ width: '7%' }}/>
+                <col style=${{ width: '7%' }}/>
+                <col style=${{ width: '7%' }}/>
+                <col style=${{ width: '7%' }}/>
+                <col style=${{ width: '10%' }}/>
+                <col style=${{ width: '10%' }}/>
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>GL Account</th>
+                  <th>Account Name</th>
+                  <th>Description</th>
+                  <th>Dept</th>
+                  <th>Class</th>
+                  <th>Project</th>
+                  <th>Location</th>
+                  <th class="r">Debit</th>
+                  <th class="r">Credit</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${je.targetLines.map((l, i) => renderLine(l, i, 'realloc'))}
+                ${je.creditLines.map((l, i) => renderLine(l, i, 'reversal'))}
+                <tr class="iat-total-row">
+                  <td colspan="8" style=${{ fontSize: '12px' }}>
+                    ${reallocCount} reallocation line${reallocCount !== 1 ? 's' : ''} + ${reversalCount} reversal line${reversalCount !== 1 ? 's' : ''}
+                  </td>
+                  <td class="r">${fmtMoney.format(je.totalDr)}</td>
+                  <td class="r">${fmtMoney.format(je.totalCr)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          ${postResult && postResult.success ? html`
+            <div class="iat-banner-success">
+              <div class="iat-banner-success-row">
+                <span style=${{ fontSize: '14px' }}>✓</span>
+                <span>Posted to Sage Intacct — Journal Batch #${postResult.key}</span>
               </div>
             </div>
-            <div style=${{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-              <button class="iat-btn-primary" onClick=${resetForNewAllocation}>New allocation</button>
+          ` : null}
+
+          ${postResult && !postResult.success ? html`
+            <div class="iat-banner-error">
+              <div class="iat-banner-error-row">
+                <span style=${{ fontSize: '14px' }}>⚠</span>
+                <span>${postResult.error || 'Posting failed'}${postResult.sageDetail && postResult.sageDetail.correction ? ' — ' + postResult.sageDetail.correction : ''}</span>
+              </div>
+            </div>
+          ` : null}
+
+          <div class="iat-action-bar">
+            ${je.balanced
+              ? html`<span class="iat-balance-ok">✓ Balanced</span>`
+              : html`<span class="iat-balance-off">⚠ Out of balance by ${fmtMoney.format(Math.abs(je.totalDr - je.totalCr))}</span>`}
+            <div class="iat-action-buttons">
+              <button class="iat-btn-ghost" type="button" onClick=${resetForNewAllocation}>Reset</button>
+              <button class="iat-btn-post" type="button"
+                disabled=${!canPost && !(postResult && postResult.success)}
+                onClick=${(postResult && postResult.success) ? resetForNewAllocation : handlePost}>
+                ${posting ? html`<span class="iat-spinner iat-spinner-sm" style=${{ borderTopColor: '#fff', borderColor: 'rgba(255,255,255,.3)' }}></span> Posting…`
+                  : (postResult && postResult.success) ? '✓ Posted — start new'
+                  : '↑ Post to Sage Intacct'}
+              </button>
             </div>
           </div>
         `;
       }
 
+      const sub = selectedPeriod ? `Period: ${selectedPeriod.name}` : null;
+
       return html`
-        <div style=${{ maxWidth: '960px' }}>
-          <h2 class="iat-panel-h1">Journal entry preview</h2>
-          <p class="iat-panel-sub">${selectedPeriod ? selectedPeriod.name + ' · ' + selectedPeriod.startDate + ' → ' + selectedPeriod.endDate : ''}</p>
-
-          ${je ? html`
-            <div class="iat-minicards">
-              <div class="iat-minicard"><div class="iat-minicard-label">Lines</div><div class="iat-minicard-value">${je.lines.length}</div></div>
-              <div class="iat-minicard"><div class="iat-minicard-label">Total debits</div><div class="iat-minicard-value">${fmtMoney.format(je.totalDr)}</div></div>
-              <div class="iat-minicard"><div class="iat-minicard-label">Total credits</div><div class="iat-minicard-value">${fmtMoney.format(je.totalCr)}</div></div>
-              <div class=${'iat-minicard ' + (je.balanced ? 'iat-minicard-success' : 'iat-minicard-danger')}>
-                <div class="iat-minicard-label">${je.balanced ? 'Balanced' : 'Out of balance'}</div>
-                <div class="iat-minicard-value">${je.balanced ? '✓' : fmtMoney.format(je.totalDr - je.totalCr)}</div>
-              </div>
-            </div>
-
-            <div class="iat-chip-row">
-              <span class="iat-chip"><span class="iat-chip-key">Target GL</span>${effectiveTargetGL || '—'}</span>
-              <span class="iat-chip"><span class="iat-chip-key">Journal</span>${journalSymbol || '—'}</span>
-              <span class="iat-chip"><span class="iat-chip-key">Date</span>${postingDate || '—'}</span>
-              ${je.negativePool ? html`<span class="iat-chip" style=${{ background: 'var(--iat-warning-soft)', color: 'var(--iat-warning)' }}><span class="iat-chip-key">Pool</span>negative — DR/CR flipped</span>` : null}
-            </div>
-
-            <div class="iat-panel-section">
-              <h3 class="iat-panel-h2">${je.negativePool ? 'Credits' : 'Debits'} · target lines · ${fmtNum.format(je.targetLines.length)} (split by ${splitDimName})</h3>
-              ${renderLineTable(je.targetLines, 'target')}
-            </div>
-
-            <div class="iat-panel-section">
-              <h3 class="iat-panel-h2">${je.negativePool ? 'Debits' : 'Credits'} · source reversal · ${fmtNum.format(je.creditLines.length)}</h3>
-              ${renderLineTable(je.creditLines, 'source reversal')}
-            </div>
-          ` : html`
-            <div class="iat-warning">${postReason || 'Complete the previous steps to compute the journal entry.'}</div>
-          `}
-
-          ${postResult && !postResult.success ? html`
-            <div class="iat-error">
-              <div class="iat-error-title">Posting failed</div>
-              <div class="iat-error-detail">${postResult.error || 'Unknown error'}${postResult.sageDetail && postResult.sageDetail.correction ? '\n\nCorrection: ' + postResult.sageDetail.correction : ''}</div>
-            </div>
-          ` : null}
-
-          <div class="iat-postbar">
-            <div class="iat-postbar-info">
-              <div class="iat-postbar-info-title">${canPost ? 'Ready to post' : 'Not ready to post'}</div>
-              <div class="iat-postbar-info-detail">${postReason || 'A confirmation dialog appears before anything is sent to Sage.'}</div>
-            </div>
-            <button class="iat-btn-primary" disabled=${!canPost} onClick=${handlePost}>
-              ${posting ? html`<span class="iat-spinner iat-spinner-sm" style=${{ borderTopColor: '#fff', borderColor: 'rgba(255,255,255,.3)' }}></span> Posting…` : 'Post to Sage'}
-            </button>
-            ${postResult && !postResult.success ? html`
-              <button class="iat-btn-secondary" onClick=${() => ctx.handlePost()} disabled=${posting}>Retry</button>
-            ` : null}
-          </div>
-        </div>
+        <${PanelCard}
+          icon="file"
+          title="Journal Entry Preview"
+          sub=${sub}
+          open=${panelOpen.je}
+          onToggle=${(e) => { e.stopPropagation(); togglePanel('je'); }}
+        >${body}<//>
       `;
     }
 
@@ -1718,5 +2071,5 @@
   } else {
     mountApp();
   }
-  console.log('[IntacctAllocationTool] mounting inline — Phase 4 (full end-to-end allocation flow)');
+  console.log('[IntacctAllocationTool] mounting inline — Phase 4 panel-card display');
 })();
