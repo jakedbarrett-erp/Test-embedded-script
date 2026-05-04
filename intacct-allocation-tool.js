@@ -1703,7 +1703,7 @@
           <div class="iat-postbar">
             <div class="iat-postbar-info">
               <div class="iat-postbar-info-title">${canPost ? 'Ready to post' : 'Not ready to post'}</div>
-              <div class="iat-postbar-info-detail">${postReason || 'Confirms a Sage GL batch will be created. You\\'ll get a chance to confirm before it actually posts.'}</div>
+              <div class="iat-postbar-info-detail">${postReason || 'A confirmation dialog appears before anything is sent to Sage.'}</div>
             </div>
             <button class="iat-btn-primary" disabled=${!canPost} onClick=${handlePost}>
               ${posting ? html`<span class="iat-spinner iat-spinner-sm" style=${{ borderTopColor: '#fff', borderColor: 'rgba(255,255,255,.3)' }}></span> Posting…` : 'Post to Sage'}
