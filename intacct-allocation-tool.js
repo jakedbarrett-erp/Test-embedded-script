@@ -195,6 +195,20 @@
       .iat-step.done   .iat-step-num { background: var(--iat-accent-soft); border-color: var(--iat-accent); color: var(--iat-accent); }
       .iat-step-title { font-size: 13px; font-weight: 600; color: var(--iat-fg); flex: 1; letter-spacing: -0.1px; }
       .iat-step-status { font-size: 11px; color: var(--iat-fg-muted); }
+      .iat-step-toggle {
+        width: 22px; height: 22px; padding: 0;
+        background: transparent; border: 1px solid transparent;
+        color: var(--iat-fg-muted);
+        cursor: pointer; border-radius: 4px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; line-height: 1; flex-shrink: 0;
+        transition: background .12s, color .12s, border-color .12s;
+      }
+      .iat-step-toggle:hover { background: var(--iat-bg-soft); color: var(--iat-fg); border-color: var(--iat-border); }
+      .iat-step-toggle:focus { outline: none; border-color: var(--iat-accent); box-shadow: 0 0 0 3px var(--iat-accent-soft); }
+      .iat-step-chev { display: inline-block; transition: transform .15s ease; line-height: 1; }
+      .iat-step.collapsed .iat-step-chev { transform: rotate(-90deg); }
+      .iat-step.collapsed { padding-bottom: 12px; }
       .iat-step-body { display: flex; flex-direction: column; gap: 10px; }
       .iat-step-section { display: flex; flex-direction: column; gap: 6px; }
       .iat-step-section + .iat-step-section {
@@ -594,6 +608,19 @@
       const [activeStep, setActiveStep] = useState(1);
       const [periodName, setPeriodName] = useState('');
 
+      // Collapse/expand for each sidebar step. Default: only the active step
+      // is expanded; the other three start collapsed so the sidebar isn't a
+      // tall scroll. Activating a step auto-expands it; the chevron lets the
+      // user override either way.
+      const [collapsedSteps, setCollapsedSteps] = useState(() => new Set([2, 3, 4]));
+      const toggleStepCollapsed = (n) => {
+        setCollapsedSteps(prev => {
+          const next = new Set(prev);
+          if (next.has(n)) next.delete(n); else next.add(n);
+          return next;
+        });
+      };
+
       // ── Phase 2 ─────────────────────────────────────────────────────────
       const [sourceMode, setSourceMode]         = useState('single');
       const [sourceGL, setSourceGL]             = useState('');
@@ -646,6 +673,16 @@
       const [postResult, setPostResult]               = useState(null); // {success, key} or {success:false, error, sageDetail}
 
       useEffect(() => { localStorage.setItem(THEME_KEY, theme); }, [theme]);
+
+      // When the active step changes, make sure it's expanded.
+      useEffect(() => {
+        setCollapsedSteps(prev => {
+          if (!prev.has(activeStep)) return prev;
+          const next = new Set(prev);
+          next.delete(activeStep);
+          return next;
+        });
+      }, [activeStep]);
 
       // Reset basis account when account type switches (stat ids ≠ gl ids)
       useEffect(() => {
@@ -1025,6 +1062,8 @@
                 title="Period"
                 status=${stepStatus(1)}
                 onActivate=${() => setActiveStep(1)}
+                collapsed=${collapsedSteps.has(1)}
+                onToggle=${() => toggleStepCollapsed(1)}
               >
                 <label class="iat-label" for="iat-period-select">Reporting period</label>
                 <select id="iat-period-select" class="iat-select" value=${periodName} onChange=${onPickPeriod}>
@@ -1041,14 +1080,17 @@
 
               <${StepCard} num=${2} title="Source pool" status=${stepStatus(2)}
                 onActivate=${() => periodName && setActiveStep(2)} disabled=${!periodName}
+                collapsed=${collapsedSteps.has(2)} onToggle=${() => toggleStepCollapsed(2)}
               ><${SourceStepBody} ctx=${ctx} /><//>
 
               <${StepCard} num=${3} title="Allocation basis" status=${stepStatus(3)}
                 onActivate=${() => stepDone[2] && setActiveStep(3)} disabled=${!stepDone[2]}
+                collapsed=${collapsedSteps.has(3)} onToggle=${() => toggleStepCollapsed(3)}
               ><${BasisStepBody} ctx=${ctx} /><//>
 
               <${StepCard} num=${4} title="Target & post" status=${stepStatus(4)}
                 onActivate=${() => stepDone[3] && setActiveStep(4)} disabled=${!stepDone[3]}
+                collapsed=${collapsedSteps.has(4)} onToggle=${() => toggleStepCollapsed(4)}
               ><${TargetStepBody} ctx=${ctx} /><//>
             </aside>
 
@@ -1079,21 +1121,35 @@
       return html`<div class="iat-stepnav">${items}</div>`;
     }
 
-    function StepCard({ num, title, status, onActivate, disabled, children }) {
-      const cls = 'iat-step' + (status === 'active' ? ' active' : status === 'done' ? ' done' : '');
+    function StepCard({ num, title, status, onActivate, disabled, collapsed, onToggle, children }) {
+      const cls = 'iat-step'
+        + (status === 'active' ? ' active' : status === 'done' ? ' done' : '')
+        + (collapsed ? ' collapsed' : '');
       const handleClick = (e) => {
         if (disabled) return;
         const tag = e.target.tagName;
         if (tag === 'SELECT' || tag === 'INPUT' || tag === 'BUTTON' || tag === 'LABEL' || tag === 'TEXTAREA') return;
         if (onActivate) onActivate();
       };
+      const handleToggle = (e) => {
+        e.stopPropagation();
+        if (onToggle) onToggle();
+      };
       return html`
         <section class=${cls} onClick=${handleClick} style=${{ cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
           <div class="iat-step-head">
             <div class="iat-step-num">${status === 'done' ? '✓' : num}</div>
             <div class="iat-step-title">${title}</div>
+            <button
+              type="button"
+              class="iat-step-toggle"
+              aria-label=${collapsed ? 'Expand step' : 'Collapse step'}
+              aria-expanded=${collapsed ? 'false' : 'true'}
+              title=${collapsed ? 'Expand' : 'Collapse'}
+              onClick=${handleToggle}
+            ><span class="iat-step-chev">▾</span></button>
           </div>
-          <div class="iat-step-body">${children}</div>
+          ${collapsed ? null : html`<div class="iat-step-body">${children}</div>`}
         </section>
       `;
     }
