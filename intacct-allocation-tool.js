@@ -470,6 +470,43 @@
       /* Two-column form for Step 4 sidebar (more compact) */
       .iat-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
+      /* Step-section heading: small all-caps label like the original */
+      .iat-section-heading {
+        font-size: 11px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .06em;
+        color: var(--iat-fg);
+        margin-bottom: 6px;
+      }
+      /* Subsection divider between Reallocation/Reversal blocks */
+      .iat-section-divider {
+        border: none; border-top: 1px solid var(--iat-border);
+        margin: 12px 0;
+      }
+      /* Collapsible "Override Dimensions" toggle — chevron + label, ghost */
+      .iat-dim-toggle {
+        display: flex; align-items: center; gap: 6px;
+        background: none; border: none;
+        padding: 4px 0; margin-top: 4px;
+        cursor: pointer; color: var(--iat-fg-soft);
+        font-size: 12px; font-family: inherit;
+        width: 100%; text-align: left;
+      }
+      .iat-dim-toggle:hover { color: var(--iat-fg); }
+      .iat-dim-toggle-chev {
+        flex-shrink: 0; transition: transform .15s;
+        color: var(--iat-fg-muted);
+      }
+      .iat-dim-toggle.open .iat-dim-toggle-chev { transform: rotate(90deg); }
+      .iat-dim-toggle-pill {
+        margin-left: 6px; font-size: 10px; font-weight: 700;
+        color: var(--iat-accent);
+        background: var(--iat-accent-soft);
+        border-radius: 10px; padding: 1px 6px;
+        letter-spacing: .04em;
+      }
+      .iat-dim-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+      .iat-dim-grid .iat-label { display: block; }
+
       /* ─── Right-panel rework: panel cards + tables (mirrors original) ─── */
       .iat-content {
         padding: 16px 20px;
@@ -897,13 +934,24 @@
       const [basisFetched, setBasisFetched]   = useState(false);
 
       // ── Phase 4: target & posting ──────────────────────────────────────
-      const [useSourceAsTarget, setUseSourceAsTarget] = useState(true);
+      // No "use source as target" toggle — when targetGL is empty (and the
+      // source is single-mode), we implicitly route to the source GL. Mirrors
+      // the original allocation-tool.html.
       const [targetGL, setTargetGL]                   = useState('');
       const [creditGLOverride, setCreditGLOverride]   = useState('');
       const [targetDept, setTargetDept]               = useState('');
       const [targetLoc, setTargetLoc]                 = useState('');
       const [targetClass, setTargetClass]             = useState('');
       const [targetProj, setTargetProj]               = useState('');
+      // Credit-side (reversal) dim overrides — same shape as target-side.
+      const [creditDept, setCreditDept]               = useState('');
+      const [creditLoc, setCreditLoc]                 = useState('');
+      const [creditClass, setCreditClass]             = useState('');
+      const [creditProj, setCreditProj]               = useState('');
+      // Collapse state for the two dim-override panels in Step 4 — both
+      // start collapsed; user expands to add overrides.
+      const [targetDimsOpen, setTargetDimsOpen]       = useState(false);
+      const [creditDimsOpen, setCreditDimsOpen]       = useState(false);
       const [journalSymbol, setJournalSymbol]         = useState('');
       const [batchTitle, setBatchTitle]               = useState('');
       const [jeDescription, setJeDescription]         = useState('');
@@ -1074,13 +1122,14 @@
       const basisTotal = useMemo(() => basisRows.reduce((s, r) => s + r.value, 0), [basisRows]);
 
       // ── Phase 4: effective target & journal entry composition ───────────
-      // If useSourceAsTarget is true and we have a single source, that's the
-      // debit GL. Otherwise targetGL must be picked. For range/multi source,
-      // useSourceAsTarget is ambiguous so we require an explicit targetGL.
+      // Convention from original allocation-tool: empty targetGL means "use
+      // source GL". For single-source we route to sourceGL. For range/multi
+      // an explicit targetGL is required.
       const effectiveTargetGL = useMemo(() => {
-        if (useSourceAsTarget && sourceMode === 'single') return sourceGL || '';
-        return targetGL || '';
-      }, [useSourceAsTarget, sourceMode, sourceGL, targetGL]);
+        if (targetGL) return targetGL;
+        if (sourceMode === 'single') return sourceGL || '';
+        return '';
+      }, [sourceMode, sourceGL, targetGL]);
 
       // Build the journal entry: debit lines per basis row, credit lines per
       // source GL. Amounts are always positive (Sage convention); TR_TYPE=1
@@ -1129,7 +1178,9 @@
           targetLines[mi].amount = Math.max(0, targetLines[mi].amount + adjust);
         }
 
-        // Credit lines (one per source GL, mirroring its source balance)
+        // Credit lines (one per source GL, mirroring its source balance).
+        // Credit-side dim overrides take precedence over the source row's
+        // own dimensions; if blank, fall back to whatever was on the source.
         const creditLines = sourceBalances
           .filter(b => Math.abs(b.periodbalance) >= 0.005)
           .map(b => ({
@@ -1138,11 +1189,10 @@
             amount:   Math.abs(b.periodbalance),
             desc:     descBase + ' · reversal',
             billable: false,
-            // Use original source dimensions so the credit nets out cleanly
-            dept: b.departmentid || undefined,
-            loc:  b.locationid   || undefined,
-            proj: b.projectid    || undefined,
-            cls:  b.classid      || undefined,
+            dept: creditDept || b.departmentid || undefined,
+            loc:  creditLoc  || b.locationid   || undefined,
+            proj: creditProj || b.projectid    || undefined,
+            cls:  creditClass|| b.classid      || undefined,
           }));
 
         const allLines = targetLines.concat(creditLines);
@@ -1156,14 +1206,14 @@
           totalDr, totalCr, balanced,
           negativePool,
         };
-      }, [basisRows, sourceBalances, sourceTotal, splitDimension, effectiveTargetGL, creditGLOverride, targetDept, targetLoc, targetClass, targetProj, jeDescription, selectedPeriod]);
+      }, [basisRows, sourceBalances, sourceTotal, splitDimension, effectiveTargetGL, creditGLOverride, targetDept, targetLoc, targetClass, targetProj, creditDept, creditLoc, creditClass, creditProj, jeDescription, selectedPeriod]);
 
       // ── Posting handler ─────────────────────────────────────────────────
       const canPost = !!je && je.balanced && !posting && !!effectiveTargetGL && !!journalSymbol && !!postingDate && !postResult;
       const postReason = (() => {
         if (postResult && postResult.success) return null;
         if (!je) return 'Complete basis selection to compute the journal entry.';
-        if (!effectiveTargetGL) return 'Pick a target GL (or leave "Use source as target" on for single-source mode).';
+        if (!effectiveTargetGL) return 'Pick a reallocation GL (or leave it empty in single-source mode to reuse the source GL).';
         if (!je.balanced) return 'Journal entry is out of balance — debits and credits must match exactly.';
         if (!journalSymbol) return 'Select a journal type.';
         if (!postingDate) return 'Set a posting date.';
@@ -1215,8 +1265,10 @@
         setBasisRangeFrom(''); setBasisRangeTo(''); setBasisMultiAccounts([]); setBasisMultiSearch('');
         setSplitDimension('');
         setBasisLoc(''); setBasisDept(''); setBasisClass(''); setBasisProj('');
-        setUseSourceAsTarget(true); setTargetGL(''); setCreditGLOverride('');
+        setTargetGL(''); setCreditGLOverride('');
         setTargetDept(''); setTargetLoc(''); setTargetClass(''); setTargetProj('');
+        setCreditDept(''); setCreditLoc(''); setCreditClass(''); setCreditProj('');
+        setTargetDimsOpen(false); setCreditDimsOpen(false);
         setJeDescription('');
         if (selectedPeriod) setBatchTitle('Allocation — ' + selectedPeriod.name);
         setActiveStep(2);
@@ -1261,11 +1313,13 @@
         basisClass, setBasisClass, basisProj, setBasisProj,
         basisBalances, basisLoading, basisError, basisFetched, basisRows, basisTotal, basisParams,
         // target & post
-        useSourceAsTarget, setUseSourceAsTarget,
         targetGL, setTargetGL, effectiveTargetGL,
         creditGLOverride, setCreditGLOverride,
         targetDept, setTargetDept, targetLoc, setTargetLoc,
         targetClass, setTargetClass, targetProj, setTargetProj,
+        creditDept, setCreditDept, creditLoc, setCreditLoc,
+        creditClass, setCreditClass, creditProj, setCreditProj,
+        targetDimsOpen, setTargetDimsOpen, creditDimsOpen, setCreditDimsOpen,
         journalSymbol, setJournalSymbol,
         batchTitle, setBatchTitle,
         jeDescription, setJeDescription,
@@ -1511,51 +1565,110 @@
     }
 
     // ── Step 4 sidebar body ──────────────────────────────────────────────
+    // Mirrors the original allocation-tool: two stacked sections
+    // (Reallocation Lines / Reversal Lines). Each has a GL override picker
+    // and a collapsible "Override Dimensions" group with 4 dim selects.
     function TargetStepBody({ ctx }) {
-      const { data, sourceMode, useSourceAsTarget, setUseSourceAsTarget } = ctx;
-      // useSourceAsTarget only makes sense in single-source mode — for
-      // range/multi the source GL is ambiguous, so we force explicit target.
-      const sourceAsTargetAvailable = sourceMode === 'single';
-      const targetGLDisabled = useSourceAsTarget && sourceAsTargetAvailable;
+      const {
+        data, sourceMode,
+        targetGL, setTargetGL, creditGLOverride, setCreditGLOverride,
+        targetDept, setTargetDept, targetLoc, setTargetLoc,
+        targetClass, setTargetClass, targetProj, setTargetProj,
+        creditDept, setCreditDept, creditLoc, setCreditLoc,
+        creditClass, setCreditClass, creditProj, setCreditProj,
+        targetDimsOpen, setTargetDimsOpen,
+        creditDimsOpen, setCreditDimsOpen,
+      } = ctx;
+
+      const targetActive = !!(targetDept || targetLoc || targetClass || targetProj);
+      const creditActive = !!(creditDept || creditLoc || creditClass || creditProj);
+
+      // Small chevron used in the override toggles — matches panel-card chevron.
+      const chevSvg = (open) => html`
+        <svg class="iat-dim-toggle-chev" width="12" height="12" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+          style=${{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      `;
+
+      const dimGrid = (rows, getter, setter, idPrefix) => html`
+        <div class="iat-dim-grid">
+          <div>
+            <label class="iat-label" for=${idPrefix + '-loc'}>Location</label>
+            <${DimSelect} id=${idPrefix + '-loc'} rows=${data.locations}
+              value=${getter.loc} onChange=${setter.loc} placeholder="No override" />
+          </div>
+          <div>
+            <label class="iat-label" for=${idPrefix + '-dept'}>Department</label>
+            <${DimSelect} id=${idPrefix + '-dept'} rows=${data.departments}
+              value=${getter.dept} onChange=${setter.dept} placeholder="No override" />
+          </div>
+          <div>
+            <label class="iat-label" for=${idPrefix + '-cls'}>Class</label>
+            <${DimSelect} id=${idPrefix + '-cls'} rows=${data.classes}
+              value=${getter.cls} onChange=${setter.cls} placeholder="No override" />
+          </div>
+          <div>
+            <label class="iat-label" for=${idPrefix + '-prj'}>Project</label>
+            <${DimSelect} id=${idPrefix + '-prj'} rows=${data.projects}
+              value=${getter.prj} onChange=${setter.prj} placeholder="No override" />
+          </div>
+        </div>
+      `;
 
       return html`
         <div class="iat-step-section">
-          <span class="iat-label">Target account</span>
-          ${sourceAsTargetAvailable ? html`
-            <label class="iat-checkbox-row">
-              <input type="checkbox" checked=${useSourceAsTarget}
-                onChange=${(e) => setUseSourceAsTarget(e.target.checked)} />
-              <span>Use source GL as target</span>
-            </label>
-          ` : html`<div class="iat-step-status">Range/Multi source — explicit target required.</div>`}
-          <label class="iat-label" for="iat-tgt-gl" style=${{ marginTop: '4px' }}>Target GL${!targetGLDisabled ? ' *' : ''}</label>
-          <select id="iat-tgt-gl" class="iat-select" value=${ctx.targetGL}
-            disabled=${targetGLDisabled}
-            onChange=${(e) => ctx.setTargetGL(e.target.value)}
-          >
-            <option value="">— select target GL —</option>
+          <div class="iat-section-heading">Reallocation Lines</div>
+          <label class="iat-label" for="iat-tgt-gl">Reallocation GL Account Override (optional)</label>
+          <select id="iat-tgt-gl" class="iat-select" value=${targetGL}
+            onChange=${(e) => setTargetGL(e.target.value)}>
+            <option value="">${sourceMode === 'single' ? '— Use source account —' : '— select target GL —'}</option>
             ${data.glAccounts.map(g => html`<option key=${g.id} value=${g.id}>${g.id} · ${g.name}</option>`)}
           </select>
-          <label class="iat-label" for="iat-tgt-credit" style=${{ marginTop: '4px' }}>Credit GL override (optional)</label>
-          <select id="iat-tgt-credit" class="iat-select" value=${ctx.creditGLOverride}
-            onChange=${(e) => ctx.setCreditGLOverride(e.target.value)}
-          >
-            <option value="">— use source GL(s) —</option>
-            ${data.glAccounts.map(g => html`<option key=${g.id} value=${g.id}>${g.id} · ${g.name}</option>`)}
-          </select>
+
+          <button type="button" class=${'iat-dim-toggle' + (targetDimsOpen ? ' open' : '')}
+            onClick=${() => setTargetDimsOpen(v => !v)}
+            aria-expanded=${targetDimsOpen ? 'true' : 'false'}>
+            ${chevSvg(targetDimsOpen)}
+            <span>Override Dimensions on Reallocation Lines</span>
+            ${targetActive ? html`<span class="iat-dim-toggle-pill">active</span>` : null}
+          </button>
+          ${targetDimsOpen ? dimGrid(
+            null,
+            { loc: targetLoc, dept: targetDept, cls: targetClass, prj: targetProj },
+            { loc: setTargetLoc, dept: setTargetDept, cls: setTargetClass, prj: setTargetProj },
+            'iat-tgt'
+          ) : null}
         </div>
 
+        <hr class="iat-section-divider"/>
+
         <div class="iat-step-section">
-          <span class="iat-label">Target dimensions (overrides)</span>
-          <label class="iat-label" for="iat-tgt-dept" style=${{ marginTop: '4px' }}>Department</label>
-          <${DimSelect} id="iat-tgt-dept" rows=${data.departments} value=${ctx.targetDept}  onChange=${ctx.setTargetDept}  placeholder="Any" />
-          <label class="iat-label" for="iat-tgt-loc" style=${{ marginTop: '4px' }}>Location</label>
-          <${DimSelect} id="iat-tgt-loc" rows=${data.locations}    value=${ctx.targetLoc}   onChange=${ctx.setTargetLoc}   placeholder="Any" />
-          <label class="iat-label" for="iat-tgt-cls" style=${{ marginTop: '4px' }}>Class</label>
-          <${DimSelect} id="iat-tgt-cls" rows=${data.classes}      value=${ctx.targetClass} onChange=${ctx.setTargetClass} placeholder="Any" />
-          <label class="iat-label" for="iat-tgt-prj" style=${{ marginTop: '4px' }}>Project</label>
-          <${DimSelect} id="iat-tgt-prj" rows=${data.projects}     value=${ctx.targetProj}  onChange=${ctx.setTargetProj}  placeholder="Any" />
+          <div class="iat-section-heading">Reversal Lines</div>
+          <label class="iat-label" for="iat-tgt-credit">Reversal GL Account Override (optional)</label>
+          <select id="iat-tgt-credit" class="iat-select" value=${creditGLOverride}
+            onChange=${(e) => setCreditGLOverride(e.target.value)}>
+            <option value="">— Use source account(s) —</option>
+            ${data.glAccounts.map(g => html`<option key=${g.id} value=${g.id}>${g.id} · ${g.name}</option>`)}
+          </select>
+
+          <button type="button" class=${'iat-dim-toggle' + (creditDimsOpen ? ' open' : '')}
+            onClick=${() => setCreditDimsOpen(v => !v)}
+            aria-expanded=${creditDimsOpen ? 'true' : 'false'}>
+            ${chevSvg(creditDimsOpen)}
+            <span>Override Dimensions on Reversal Lines</span>
+            ${creditActive ? html`<span class="iat-dim-toggle-pill">active</span>` : null}
+          </button>
+          ${creditDimsOpen ? dimGrid(
+            null,
+            { loc: creditLoc, dept: creditDept, cls: creditClass, prj: creditProj },
+            { loc: setCreditLoc, dept: setCreditDept, cls: setCreditClass, prj: setCreditProj },
+            'iat-crd'
+          ) : null}
         </div>
+
+        <hr class="iat-section-divider"/>
 
         <div class="iat-step-section">
           <span class="iat-label">Line description (optional)</span>
