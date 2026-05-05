@@ -195,19 +195,6 @@
       .iat-step.done   .iat-step-num { background: var(--iat-accent-soft); border-color: var(--iat-accent); color: var(--iat-accent); }
       .iat-step-title { font-size: 13px; font-weight: 600; color: var(--iat-fg); flex: 1; letter-spacing: -0.1px; }
       .iat-step-status { font-size: 11px; color: var(--iat-fg-muted); }
-      .iat-step-toggle {
-        width: 22px; height: 22px; padding: 0;
-        background: transparent; border: 1px solid transparent;
-        color: var(--iat-fg-muted);
-        cursor: pointer; border-radius: 4px;
-        display: inline-flex; align-items: center; justify-content: center;
-        font-size: 11px; line-height: 1; flex-shrink: 0;
-        transition: background .12s, color .12s, border-color .12s;
-      }
-      .iat-step-toggle:hover { background: var(--iat-bg-soft); color: var(--iat-fg); border-color: var(--iat-border); }
-      .iat-step-toggle:focus { outline: none; border-color: var(--iat-accent); box-shadow: 0 0 0 3px var(--iat-accent-soft); }
-      .iat-step-chev { display: inline-block; transition: transform .15s ease; line-height: 1; }
-      .iat-step.collapsed .iat-step-chev { transform: rotate(-90deg); }
       .iat-step.collapsed { padding-bottom: 12px; }
       .iat-step-body { display: flex; flex-direction: column; gap: 10px; }
       .iat-step-section { display: flex; flex-direction: column; gap: 6px; }
@@ -343,7 +330,6 @@
       .iat-table .iat-num {
         font-variant-numeric: tabular-nums;
         text-align: right;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       .iat-table tfoot td {
         padding: 10px 14px;
@@ -360,7 +346,6 @@
         display: flex; justify-content: space-between;
         font-size: 11px; color: var(--iat-fg-soft);
         font-variant-numeric: tabular-nums;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
 
       /* Chips */
@@ -404,7 +389,7 @@
       .iat-spinner-sm { width: 16px; height: 16px; border-width: 2px; display: inline-block; vertical-align: middle; }
       @keyframes iat-spin { to { transform: rotate(360deg); } }
       .iat-loading-msg { font-size: 13px; }
-      .iat-loading-detail { font-size: 11px; color: var(--iat-fg-muted, #a1a1aa); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .iat-loading-detail { font-size: 11px; color: var(--iat-fg-muted, #a1a1aa); }
 
       .iat-inline-loading {
         display: flex; align-items: center; gap: 10px;
@@ -419,7 +404,7 @@
         color: var(--iat-danger, #991b1b);
       }
       .iat-error-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
-      .iat-error-detail { font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-word; white-space: pre-wrap; }
+      .iat-error-detail { font-size: 12px; word-break: break-word; white-space: pre-wrap; }
 
       .iat-warning {
         margin: 12px 0; padding: 12px;
@@ -479,7 +464,6 @@
         margin-top: 10px; padding: 6px 12px;
         background: var(--iat-bg-card); color: var(--iat-fg);
         border: 1px solid var(--iat-border); border-radius: 6px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         font-size: 13px; font-weight: 600;
       }
 
@@ -573,7 +557,6 @@
       .iat-data-table td.r {
         text-align: right;
         font-variant-numeric: tabular-nums;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       .iat-data-table tr:last-child td { border-bottom: none; }
       .iat-data-table tbody tr:hover td { background: var(--iat-bg-soft); }
@@ -603,7 +586,6 @@
       .iat-je-table td.r {
         text-align: right;
         font-variant-numeric: tabular-nums;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       .iat-je-table tr:last-child td { border-bottom: none; }
       .iat-je-table .iat-row-realloc td  { background: rgba(200,112,85,.07);  border-bottom-color: rgba(200,112,85,.12); }
@@ -1314,8 +1296,6 @@
 
           <div class="iat-app-body">
             <aside class="iat-sidebar">
-              <${StepNav} activeStep=${activeStep} done=${stepDone} />
-
               <${StepCard}
                 num=${1}
                 title="Period"
@@ -1362,36 +1342,22 @@
     }
 
     // ── Reusable components ──────────────────────────────────────────────
-    function StepNav({ activeStep, done }) {
-      const dots = [1, 2, 3, 4].map(n => {
-        const cls = ['iat-stepnav-dot'];
-        if (done && done[n]) cls.push('done');
-        if (n === activeStep) cls.push('active');
-        return html`<span key=${'d' + n} class=${cls.join(' ')}>${done && done[n] ? '✓' : n}</span>`;
-      });
-      const items = [];
-      for (let i = 0; i < dots.length; i++) {
-        items.push(dots[i]);
-        if (i < dots.length - 1) {
-          const lineDone = done && done[i + 1];
-          items.push(html`<span key=${'l' + i} class=${'iat-stepnav-line' + (lineDone ? ' done' : '')}></span>`);
-        }
-      }
-      return html`<div class="iat-stepnav">${items}</div>`;
-    }
-
-    function StepCard({ num, title, status, onActivate, disabled, collapsed, onToggle, children }) {
+    // StepCard now mirrors PanelCard: click anywhere on the head to toggle
+    // collapse, with a passive SVG chevron that rotates 90° when expanded.
+    // (`onActivate` is preserved for callers but unused — auto-advance still
+    // sets activeStep when prereqs are met.)
+    function StepCard({ num, title, status, disabled, collapsed, onToggle, children }) {
       const cls = 'iat-step'
         + (status === 'active' ? ' active' : status === 'done' ? ' done' : '')
         + (collapsed ? ' collapsed' : '');
       const handleClick = (e) => {
         if (disabled) return;
+        // Don't toggle when the user interacts with form controls inside the
+        // body — only when the click is on the head (or its non-control kids).
         const tag = e.target.tagName;
         if (tag === 'SELECT' || tag === 'INPUT' || tag === 'BUTTON' || tag === 'LABEL' || tag === 'TEXTAREA') return;
-        if (onActivate) onActivate();
-      };
-      const handleToggle = (e) => {
-        e.stopPropagation();
+        // Only the head should toggle — clicks inside the body shouldn't.
+        if (!e.target.closest('.iat-step-head')) return;
         if (onToggle) onToggle();
       };
       return html`
@@ -1399,14 +1365,11 @@
           <div class="iat-step-head">
             <div class="iat-step-num">${status === 'done' ? '✓' : num}</div>
             <div class="iat-step-title">${title}</div>
-            <button
-              type="button"
-              class="iat-step-toggle"
-              aria-label=${collapsed ? 'Expand step' : 'Collapse step'}
-              aria-expanded=${collapsed ? 'false' : 'true'}
-              title=${collapsed ? 'Expand' : 'Collapse'}
-              onClick=${handleToggle}
-            ><span class="iat-step-chev">▾</span></button>
+            <svg class="iat-panel-card-chev" width="12" height="12" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+              style=${{ transform: collapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
           </div>
           ${collapsed ? null : html`<div class="iat-step-body">${children}</div>`}
         </section>
@@ -1612,31 +1575,13 @@
       `;
     }
 
-    // SVG icons used in the panel-card headers (greyscale, currentColor).
-    // Each branch returns a self-contained <svg> with explicit attributes —
-    // we avoid spreading because htm's spread doesn't normalize `class` →
-    // `className` for React.
-    function PanelIcon({ name }) {
-      if (name === 'db') {
-        return html`<svg class="iat-panel-card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`;
-      }
-      if (name === 'chart') {
-        return html`<svg class="iat-panel-card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`;
-      }
-      if (name === 'file') {
-        return html`<svg class="iat-panel-card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`;
-      }
-      return null;
-    }
-
     // Reusable panel-card with a clickable header row, optional sub line,
     // optional filter chips strip, and a body that hides when collapsed.
-    function PanelCard({ icon, title, sub, filterChips, open, onToggle, children }) {
+    function PanelCard({ title, sub, filterChips, open, onToggle, children }) {
       return html`
         <section class="iat-panel-card">
           <div class=${'iat-panel-card-header' + (open ? ' open' : '')} onClick=${onToggle}>
             <div class="iat-panel-card-header-row">
-              <${PanelIcon} name=${icon} />
               <span class="iat-panel-card-title">${title}</span>
               <svg class="iat-panel-card-chev" width="12" height="12" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1716,7 +1661,7 @@
       } else if (sourceError) {
         body = html`<${PanelEmpty} icon="⚠">
           <span style=${{ color: 'var(--iat-danger)' }}>Error fetching balances:<br/>
-            <span style=${{ fontSize: '11px', fontFamily: 'monospace' }}>${sourceError}</span>
+            <span style=${{ fontSize: '11px' }}>${sourceError}</span>
           </span>
         <//>`;
       } else if (!sourceParams || !sourceFetched) {
@@ -1743,7 +1688,7 @@
             <tbody>
               ${rows.map(([glId, g]) => html`
                 <tr key=${glId}>
-                  <td style=${{ fontWeight: 600, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>${glId}</td>
+                  <td style=${{ fontWeight: 600 }}>${glId}</td>
                   <td style=${{ color: 'var(--iat-fg-soft)' }}>${g.title}</td>
                   <td class="r" style=${{ color: 'var(--iat-fg-soft)' }}>${sourceTotal !== 0 ? fmtPct.format(g.amt / sourceTotal) : '—'}</td>
                   <td class="r" style=${{ fontWeight: 600 }}>${fmtMoney.format(g.amt)}</td>
@@ -1763,7 +1708,6 @@
 
       return html`
         <${PanelCard}
-          icon="db"
           title="Pool Account Balances"
           filterChips=${filterChips}
           open=${panelOpen.pool}
@@ -1810,7 +1754,7 @@
       } else if (basisError) {
         body = html`<${PanelEmpty} icon="⚠">
           <span style=${{ color: 'var(--iat-danger)' }}>Error fetching basis data:<br/>
-            <span style=${{ fontSize: '11px', fontFamily: 'monospace' }}>${basisError}</span>
+            <span style=${{ fontSize: '11px' }}>${basisError}</span>
           </span>
         <//>`;
       } else if (!basisParams || !basisFetched) {
@@ -1845,7 +1789,6 @@
                       fontWeight: r.id ? 600 : 400,
                       color: r.id ? 'var(--iat-fg)' : 'var(--iat-fg-muted)',
                       fontStyle: r.id ? 'normal' : 'italic',
-                      fontFamily: r.id ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : 'inherit',
                     }}>
                     ${r.id || 'Blank dimension'}
                   </td>
@@ -1875,7 +1818,6 @@
 
       return html`
         <${PanelCard}
-          icon="chart"
           title="Basis Breakdown"
           sub=${sub}
           filterChips=${filterChips}
@@ -1917,7 +1859,7 @@
                 ${isRealloc ? 'REALLOC' : 'REVERSAL'}
               </span>
             </td>
-            <td style=${{ fontWeight: 600, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>${line.gl}</td>
+            <td style=${{ fontWeight: 600 }}>${line.gl}</td>
             <td style=${{ color: 'var(--iat-fg-soft)' }}>${glName && glName !== line.gl ? glName : '—'}</td>
             <td style=${{ fontSize: '12px', color: 'var(--iat-fg-soft)' }}>${line.desc}</td>
             <td>${cellChip('D', line.dept, data.departments)}</td>
@@ -2052,7 +1994,6 @@
 
       return html`
         <${PanelCard}
-          icon="file"
           title="Journal Entry Preview"
           sub=${sub}
           open=${panelOpen.je}
